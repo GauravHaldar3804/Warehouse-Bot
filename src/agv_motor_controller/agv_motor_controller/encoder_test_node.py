@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 import RPi.GPIO as GPIO
+import time
 
 
 class EncoderTestNode(Node):
@@ -17,32 +18,25 @@ class EncoderTestNode(Node):
 
         self.tick_count = 0
 
-        # Store previous state
-        self.prev_state = (GPIO.input(self.ENCODER_A) << 1) | GPIO.input(self.ENCODER_B)
-
-        # Detect change on BOTH channels
-        GPIO.add_event_detect(self.ENCODER_A, GPIO.BOTH, callback=self.encoder_callback)
-        GPIO.add_event_detect(self.ENCODER_B, GPIO.BOTH, callback=self.encoder_callback)
+        # Only RISING edge on channel A
+        GPIO.add_event_detect(
+            self.ENCODER_A,
+            GPIO.RISING,
+            callback=self.encoder_callback,
+            bouncetime=1
+        )
 
         self.timer = self.create_timer(0.5, self.print_ticks)
 
-        self.get_logger().info("Improved encoder test started...")
+        self.get_logger().info("Stable Hall encoder test started...")
 
     def encoder_callback(self, channel):
-        a = GPIO.input(self.ENCODER_A)
-        b = GPIO.input(self.ENCODER_B)
+        b_state = GPIO.input(self.ENCODER_B)
 
-        current_state = (a << 1) | b
-
-        # Quadrature state transition table
-        transition = (self.prev_state << 2) | current_state
-
-        if transition in [0b0001, 0b0111, 0b1110, 0b1000]:
+        if b_state == 0:
             self.tick_count += 1
-        elif transition in [0b0010, 0b0100, 0b1101, 0b1011]:
+        else:
             self.tick_count -= 1
-
-        self.prev_state = current_state
 
     def print_ticks(self):
         self.get_logger().info(f"Tick Count: {self.tick_count}")
