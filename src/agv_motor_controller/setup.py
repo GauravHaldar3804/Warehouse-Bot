@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools'],
+    install_requires=['setuptools', 'adafruit-circuitpython-mpu6050', 'adafruit-circuitpython-busdevice', 'adafruit-circuitpython-register'],
     zip_safe=True,
     maintainer='gaurav',
     maintainer_email='gaurav@todo.todo',
