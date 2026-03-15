@@ -31,6 +31,11 @@ class IMU6050Node(Node):
         self.roll = 0.0
         self.pitch = 0.0
         self.yaw = 0.0
+        
+        # Calibration offsets (set to 0 initially, adjust if needed)
+        self.gyro_x_offset = 0.0
+        self.gyro_y_offset = 0.0
+        self.gyro_z_offset = 0.0
 
         # Publisher
         self.imu_publisher = self.create_publisher(Imu, 'imu/data', 10)
@@ -50,12 +55,15 @@ class IMU6050Node(Node):
         Calculate roll and pitch angles from accelerometer data.
         Uses complementary filter combining accelerometer and gyroscope data.
         """
-        # Calculate angles from accelerometer
+        # Calculate angles from accelerometer (in degrees)
         accel_roll = math.atan2(accel_y, accel_z) * 180 / math.pi
         accel_pitch = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2)) * 180 / math.pi
 
-        # Get gyroscope data (in degrees/second)
+        # Get gyroscope data (in rad/s, convert to deg/s)
         gyro_x, gyro_y, gyro_z = self.sensor.gyro
+        gyro_x_deg = (gyro_x - self.gyro_x_offset) * 180 / math.pi
+        gyro_y_deg = (gyro_y - self.gyro_y_offset) * 180 / math.pi
+        gyro_z_deg = (gyro_z - self.gyro_z_offset) * 180 / math.pi
 
         # Time delta
         current_time = time.time()
@@ -63,13 +71,13 @@ class IMU6050Node(Node):
         self.prev_time = current_time
 
         if dt > 0:
-            # Complementary filter (0.98 gyro, 0.02 accel)
-            alpha = 0.98
-            self.roll = alpha * (self.roll + gyro_x * dt) + (1 - alpha) * accel_roll
-            self.pitch = alpha * (self.pitch + gyro_y * dt) + (1 - alpha) * accel_pitch
-            self.yaw += gyro_z * dt
+            # Complementary filter (0.96 gyro, 0.04 accel)
+            alpha = 0.96
+            self.roll = alpha * (self.roll + gyro_x_deg * dt) + (1 - alpha) * accel_roll
+            self.pitch = alpha * (self.pitch + gyro_y_deg * dt) + (1 - alpha) * accel_pitch
+            self.yaw += gyro_z_deg * dt
 
-        return self.roll, self.pitch, self.yaw
+        return self.roll, self.pitch, self.yaw, gyro_x_deg, gyro_y_deg, gyro_z_deg
 
     def publish_imu_data(self):
         """Publish IMU data to the 'imu/data' topic."""
@@ -78,12 +86,11 @@ class IMU6050Node(Node):
             accel_data = self.sensor.acceleration
             accel_x, accel_y, accel_z = accel_data
 
-            # Read gyroscope data (in rad/s)
-            gyro_data = self.sensor.gyro
-            gyro_x, gyro_y, gyro_z = gyro_data
-
-            # Calculate angles
-            roll, pitch, yaw = self.calculate_angles(accel_x, accel_y, accel_z)
+            # Calculate angles (also returns converted gyro values)
+            roll, pitch, yaw, gyro_x_deg, gyro_y_deg, gyro_z_deg = self.calculate_angles(accel_x, accel_y, accel_z)
+            
+            # Get raw gyroscope data for publishing (in rad/s)
+            gyro_x, gyro_y, gyro_z = self.sensor.gyro
 
             # Create IMU message
             imu_msg = Imu()
@@ -95,7 +102,7 @@ class IMU6050Node(Node):
             imu_msg.linear_acceleration.y = accel_y
             imu_msg.linear_acceleration.z = accel_z
 
-            # Angular velocity (gyroscope data)
+            # Angular velocity (gyroscope data in rad/s)
             imu_msg.angular_velocity.x = gyro_x
             imu_msg.angular_velocity.y = gyro_y
             imu_msg.angular_velocity.z = gyro_z
@@ -136,7 +143,8 @@ class IMU6050Node(Node):
             print(f'\n--- IMU6050 Data ---')
             print(f'Angles: Roll={roll:.2f}°, Pitch={pitch:.2f}°, Yaw={yaw:.2f}°')
             print(f'Accel: X={accel_x:.3f} m/s², Y={accel_y:.3f} m/s², Z={accel_z:.3f} m/s²')
-            print(f'Gyro:  X={gyro_x:.3f} rad/s, Y={gyro_y:.3f} rad/s, Z={gyro_z:.3f} rad/s')
+            print(f'Gyro (rad/s): X={gyro_x:.4f}, Y={gyro_y:.4f}, Z={gyro_z:.4f}')
+            print(f'Gyro (deg/s): X={gyro_x_deg:.2f}, Y={gyro_y_deg:.2f}, Z={gyro_z_deg:.2f}')
 
         except Exception as e:
             self.get_logger().error(f'Error reading IMU data: {str(e)}')
