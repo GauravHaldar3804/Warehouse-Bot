@@ -26,6 +26,7 @@ setup(
     'console_scripts': [
         'motor_test = agv_motor_controller.motor_test_node:main',
         'encoder_test = agv_motor_controller.encoder_test_node:main',
+        'imu6050_node = agv_motor_controller.imu6050_node:main',
     ],
 },
 )
