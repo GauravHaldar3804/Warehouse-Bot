@@ -5,7 +5,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 import board
 import busio
-import adafruit_vl53l0x
+from adafruit_vl53l0x import VL53L0X
 import time
 
 
@@ -24,7 +24,7 @@ class TOFTestNode(Node):
             i2c = busio.I2C(board.SCL, board.SDA)
             
             # Initialize VL53L0X sensor
-            self.sensor = adafruit_vl53l0x.Adafruit_VL53L0X(i2c)
+            self.sensor = VL53L0X(i2c)
             
             self.get_logger().info("VL53L0X TOF Sensor initialized successfully!")
             self.get_logger().info("Distance measurements will be published to 'tof_distance' topic in cm")
