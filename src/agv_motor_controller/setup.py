@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'adafruit-circuitpython-mpu6050', 'adafruit-circuitpython-busdevice', 'adafruit-circuitpython-register'],
+    install_requires=['setuptools', 'adafruit-circuitpython-mpu6050', 'adafruit-circuitpython-busdevice', 'adafruit-circuitpython-register', 'adafruit-circuitpython-vl53l0x'],
     zip_safe=True,
     maintainer='gaurav',
     maintainer_email='gaurav@todo.todo',
@@ -28,6 +28,7 @@ setup(
         'encoder_test = agv_motor_controller.encoder_test_node:main',
         'imu6050_node = agv_motor_controller.imu6050_node:main',
         'imu_node = agv_motor_controller.imu_node:main',
+        'tof_test = agv_motor_controller.tof_test_node:main',
     ],
 },
 )
