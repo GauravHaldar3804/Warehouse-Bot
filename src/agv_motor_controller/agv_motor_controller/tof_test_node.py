@@ -90,6 +90,10 @@ class TOFTestNode(Node):
     def read_distances(self):
         """Read distance from both TOF sensors using XSHUT multiplexing and publish them."""
         try:
+            print("=== Reading Sensors ===", flush=True)
+            distance_cm_1 = 0
+            distance_cm_2 = 0
+            
             # Read from sensor 1 - enable only sensor 1
             if self.sensor1:
                 self.xshut1.value = True
@@ -115,8 +119,7 @@ class TOFTestNode(Node):
                 msg_range.range = distance_cm_1 / 100.0  # Convert to meters
                 self.range_pub_1.publish(msg_range)
                 
-                print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)")
-                self.get_logger().info(f"Sensor 1: {distance_cm_1:.2f} cm")
+                print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
             
             # Read from sensor 2 - enable only sensor 2
             if self.sensor2:
@@ -143,19 +146,17 @@ class TOFTestNode(Node):
                 msg_range.range = distance_cm_2 / 100.0
                 self.range_pub_2.publish(msg_range)
                 
-                print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)")
-                self.get_logger().info(f"Sensor 2: {distance_cm_2:.2f} cm")
+                print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
             
             # Print combined readings
-            print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<")
+            print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<", flush=True)
             
             # Keep both enabled for next cycle
             self.xshut1.value = True
             self.xshut2.value = True
                 
-            self.get_logger().info(f"Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm")
-            
         except Exception as e:
+            print(f"ERROR in read_distances: {e}", flush=True)
             self.get_logger().error(f"Error reading sensors: {e}")
 
 
