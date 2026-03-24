@@ -3,10 +3,8 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32
-from sensor_msgs.msg import Range
 import board
 import busio
-import digitalio
 from adafruit_vl53l0x import VL53L0X
 import time
 
@@ -15,151 +13,56 @@ class TOFTestNode(Node):
     def __init__(self):
         super().__init__('tof_test_node')
         
-        # GPIO pins for XSHUT control (change to your GPIO pins if needed)
-        self.XSHUT_PIN_1 = board.D4   # XSHUT pin for sensor 1
-        self.XSHUT_PIN_2 = board.D5   # XSHUT pin for sensor 2
+        # Create publisher for distance measurements (in cm)
+        self.publisher = self.create_publisher(Float32, 'tof_distance', 10)
         
-        # I2C addresses
-        self.SENSOR1_ADDRESS = 0x29   # Default VL53L0X address
-        self.SENSOR2_ADDRESS = 0x30   # Changed address for second sensor
+        # Timer for periodic measurements (100ms interval = 10 Hz)
+        self.timer = self.create_timer(0.1, self.read_distance)
         
-        # Create publishers for distance measurements (in cm)
-        self.publisher_1 = self.create_publisher(Float32, 'tof_distance_1', 10)
-        self.publisher_2 = self.create_publisher(Float32, 'tof_distance_2', 10)
-        
-        # Alternative: If you want combined measurement in Range message
-        self.range_pub_1 = self.create_publisher(Range, 'tof_range_1', 10)
-        self.range_pub_2 = self.create_publisher(Range, 'tof_range_2', 10)
-        
-        # Timer for periodic measurements (500ms interval = 2 Hz)
-        self.timer = self.create_timer(0.5, self.read_distances)
-        
-        self.sensor1 = None
-        self.sensor2 = None
+        self.sensor = None
         
         try:
-            self.initialize_dual_sensors()
-            self.get_logger().info("Dual TOF Sensors initialized successfully!")
-            self.get_logger().info("Sensor 1 (0x29) publishes to 'tof_distance_1' and 'tof_range_1'")
-            self.get_logger().info("Sensor 2 (0x30) publishes to 'tof_distance_2' and 'tof_range_2'")
+            # Initialize I2C bus
+            i2c = busio.I2C(board.SCL, board.SDA)
+            
+            # Initialize VL53L0X sensor
+            self.sensor = VL53L0X(i2c)
+            
+            self.get_logger().info("VL53L0X TOF Sensor initialized successfully!")
+            self.get_logger().info("Distance measurements will be published to 'tof_distance' topic in cm")
             
         except Exception as e:
-            self.get_logger().error(f"Failed to initialize TOF sensors: {e}")
-            self.get_logger().error("Make sure both sensors are connected to I2C pins with proper XSHUT GPIO connections")
+            self.get_logger().error(f"Failed to initialize TOF sensor: {e}")
+            self.get_logger().error("Make sure the sensor is connected to I2C pins")
             raise
 
-    def initialize_dual_sensors(self):
-        """Initialize two TOF sensors using XSHUT multiplexing.
-        
-        Note: VL53L0X sensors cannot change I2C addresses.
-        Both run at 0x29, but we control them with XSHUT pins.
-        """
-        # Initialize I2C bus
-        self.i2c = busio.I2C(board.SCL, board.SDA)
-        
-        # Setup XSHUT GPIO pins
-        self.xshut1 = digitalio.DigitalInOut(self.XSHUT_PIN_1)
-        self.xshut2 = digitalio.DigitalInOut(self.XSHUT_PIN_2)
-        self.xshut1.direction = digitalio.Direction.OUTPUT
-        self.xshut2.direction = digitalio.Direction.OUTPUT
-        
-        # Power down both sensors
-        self.xshut1.value = False
-        self.xshut2.value = False
-        time.sleep(0.2)
-        
-        # Initialize sensor 1 - enable only sensor 1
-        self.xshut1.value = True
-        self.xshut2.value = False
-        time.sleep(0.3)
-        self.sensor1 = VL53L0X(self.i2c)
-        self.get_logger().info(f"Sensor 1 initialized at address 0x{self.SENSOR1_ADDRESS:02x}")
-        
-        # Initialize sensor 2 - enable only sensor 2
-        self.xshut1.value = False
-        self.xshut2.value = True
-        time.sleep(0.3)
-        self.sensor2 = VL53L0X(self.i2c)
-        self.get_logger().info(f"Sensor 2 initialized at address 0x{self.SENSOR2_ADDRESS:02x} (using XSHUT multiplexing)")
-        
-        # Enable both sensors for normal operation
-        self.xshut1.value = True
-        self.xshut2.value = True
-        time.sleep(0.1)
-
-    def read_distances(self):
-        """Read distance from TOF sensors and publish them."""
+    def read_distance(self):
+        """Read distance from VL53L0X sensor and publish it."""
         try:
-            print("=== Reading Sensors (No XSHUT Switching) ===", flush=True)
+            if self.sensor is None:
+                self.get_logger().error("Sensor is None!")
+                return
             
-            distance_cm_1 = 0
-            distance_cm_2 = 0
+            print("Reading sensor...", flush=True)
+            # Read distance in millimeters
+            distance_mm = self.sensor.range
+            print(f"Got range: {distance_mm} mm", flush=True)
             
-            # Read from sensor 1 only
-            print("Reading Sensor 1...", flush=True)
-            if self.sensor1 is not None:
-                try:
-                    print("  Getting range from Sensor 1...", flush=True)
-                    # Try to read with a simple try-except
-                    distance_mm_1 = self.sensor1.range
-                    distance_cm_1 = distance_mm_1 / 10.0
-                    print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
-                    
-                    # Publish as Float32
-                    msg_float = Float32()
-                    msg_float.data = distance_cm_1
-                    self.publisher_1.publish(msg_float)
-                    
-                    # Publish as Range message
-                    msg_range = Range()
-                    msg_range.header.stamp = self.get_clock().now().to_msg()
-                    msg_range.header.frame_id = "tof_link_1"
-                    msg_range.radiation_type = Range.INFRARED
-                    msg_range.field_of_view = 0.471
-                    msg_range.min_range = 0.0
-                    msg_range.max_range = 2.0
-                    msg_range.range = distance_cm_1 / 100.0
-                    self.range_pub_1.publish(msg_range)
-                    
-                except Exception as e:
-                    print(f"  ERROR reading Sensor 1: {e}", flush=True)
+            # Convert to centimeters
+            distance_cm = distance_mm / 10.0
             
-            # Read from sensor 2 only (no XSHUT switching for now)
-            print("Reading Sensor 2...", flush=True)
-            if self.sensor2 is not None:
-                try:
-                    print("  Getting range from Sensor 2...", flush=True)
-                    distance_mm_2 = self.sensor2.range
-                    distance_cm_2 = distance_mm_2 / 10.0
-                    print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
-                    
-                    # Publish as Float32
-                    msg_float = Float32()
-                    msg_float.data = distance_cm_2
-                    self.publisher_2.publish(msg_float)
-                    
-                    # Publish as Range message
-                    msg_range = Range()
-                    msg_range.header.stamp = self.get_clock().now().to_msg()
-                    msg_range.header.frame_id = "tof_link_2"
-                    msg_range.radiation_type = Range.INFRARED
-                    msg_range.field_of_view = 0.471
-                    msg_range.min_range = 0.0
-                    msg_range.max_range = 2.0
-                    msg_range.range = distance_cm_2 / 100.0
-                    self.range_pub_2.publish(msg_range)
-                    
-                except Exception as e:
-                    print(f"  ERROR reading Sensor 2: {e}", flush=True)
+            # Create and publish message
+            msg = Float32()
+            msg.data = distance_cm
+            self.publisher.publish(msg)
             
-            # Print combined readings
-            print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<", flush=True)
-                
+            # Print to terminal
+            print(f"Distance: {distance_cm:.2f} cm ({distance_mm} mm)", flush=True)
+            self.get_logger().info(f"Distance: {distance_cm:.2f} cm ({distance_mm} mm)")
+            
         except Exception as e:
-            print(f"ERROR in read_distances: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            self.get_logger().error(f"Error reading sensors: {e}")
+            print(f"ERROR: {e}", flush=True)
+            self.get_logger().error(f"Error reading sensor: {e}")
 
 
 def main(args=None):
