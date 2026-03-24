@@ -31,9 +31,8 @@ class TOFTestNode(Node):
         self.range_pub_1 = self.create_publisher(Range, 'tof_range_1', 10)
         self.range_pub_2 = self.create_publisher(Range, 'tof_range_2', 10)
         
-        # Timer for periodic measurements (increased interval due to dual sensor XSHUT switching)
-        # Each sensor needs 200ms to stabilize + 100ms between them = ~500ms total
-        self.timer = self.create_timer(0.6, self.read_distances)
+        # Timer for periodic measurements (500ms interval = 2 Hz)
+        self.timer = self.create_timer(0.5, self.read_distances)
         
         self.sensor1 = None
         self.sensor2 = None
@@ -89,28 +88,22 @@ class TOFTestNode(Node):
         time.sleep(0.1)
 
     def read_distances(self):
-        """Read distance from both TOF sensors using XSHUT multiplexing and publish them."""
+        """Read distance from TOF sensors and publish them."""
         try:
-            print("=== Reading Sensors ===", flush=True)
+            print("=== Reading Sensors (No XSHUT Switching) ===", flush=True)
             
             distance_cm_1 = 0
             distance_cm_2 = 0
-            distance_mm_1 = 0
-            distance_mm_2 = 0
             
-            # Read from sensor 1 - enable only sensor 1
+            # Read from sensor 1 only
             print("Reading Sensor 1...", flush=True)
             if self.sensor1 is not None:
                 try:
-                    self.xshut1.value = True
-                    self.xshut2.value = False
-                    print("  Sensor 1 XSHUT enabled, Sensor 2 disabled", flush=True)
-                    time.sleep(0.2)  # Increased delay for sensor stabilization
-                    
-                    print("  Attempting to read Sensor 1 range...", flush=True)
+                    print("  Getting range from Sensor 1...", flush=True)
+                    # Try to read with a simple try-except
                     distance_mm_1 = self.sensor1.range
-                    print(f"  SUCCESS: Sensor 1 range = {distance_mm_1} mm", flush=True)
                     distance_cm_1 = distance_mm_1 / 10.0
+                    print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
                     
                     # Publish as Float32
                     msg_float = Float32()
@@ -128,27 +121,17 @@ class TOFTestNode(Node):
                     msg_range.range = distance_cm_1 / 100.0
                     self.range_pub_1.publish(msg_range)
                     
-                    print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
                 except Exception as e:
                     print(f"  ERROR reading Sensor 1: {e}", flush=True)
-                    import traceback
-                    traceback.print_exc()
             
-            time.sleep(0.1)  # Delay between sensor reads
-            
-            # Read from sensor 2 - enable only sensor 2
+            # Read from sensor 2 only (no XSHUT switching for now)
             print("Reading Sensor 2...", flush=True)
             if self.sensor2 is not None:
                 try:
-                    self.xshut1.value = False
-                    self.xshut2.value = True
-                    print("  Sensor 1 disabled, Sensor 2 XSHUT enabled", flush=True)
-                    time.sleep(0.2)  # Increased delay for sensor stabilization
-                    
-                    print("  Attempting to read Sensor 2 range...", flush=True)
+                    print("  Getting range from Sensor 2...", flush=True)
                     distance_mm_2 = self.sensor2.range
-                    print(f"  SUCCESS: Sensor 2 range = {distance_mm_2} mm", flush=True)
                     distance_cm_2 = distance_mm_2 / 10.0
+                    print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
                     
                     # Publish as Float32
                     msg_float = Float32()
@@ -166,18 +149,11 @@ class TOFTestNode(Node):
                     msg_range.range = distance_cm_2 / 100.0
                     self.range_pub_2.publish(msg_range)
                     
-                    print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
                 except Exception as e:
                     print(f"  ERROR reading Sensor 2: {e}", flush=True)
-                    import traceback
-                    traceback.print_exc()
             
             # Print combined readings
             print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<", flush=True)
-            
-            # Keep both enabled for next cycle
-            self.xshut1.value = True
-            self.xshut2.value = True
                 
         except Exception as e:
             print(f"ERROR in read_distances: {e}", flush=True)
