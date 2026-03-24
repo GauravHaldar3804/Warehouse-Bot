@@ -31,8 +31,9 @@ class TOFTestNode(Node):
         self.range_pub_1 = self.create_publisher(Range, 'tof_range_1', 10)
         self.range_pub_2 = self.create_publisher(Range, 'tof_range_2', 10)
         
-        # Timer for periodic measurements (100ms interval = 10 Hz)
-        self.timer = self.create_timer(0.1, self.read_distances)
+        # Timer for periodic measurements (increased interval due to dual sensor XSHUT switching)
+        # Each sensor needs 200ms to stabilize + 100ms between them = ~500ms total
+        self.timer = self.create_timer(0.6, self.read_distances)
         
         self.sensor1 = None
         self.sensor2 = None
@@ -91,93 +92,85 @@ class TOFTestNode(Node):
         """Read distance from both TOF sensors using XSHUT multiplexing and publish them."""
         try:
             print("=== Reading Sensors ===", flush=True)
-            print(f"sensor1 is None: {self.sensor1 is None}", flush=True)
-            print(f"sensor2 is None: {self.sensor2 is None}", flush=True)
             
             distance_cm_1 = 0
             distance_cm_2 = 0
+            distance_mm_1 = 0
+            distance_mm_2 = 0
             
             # Read from sensor 1 - enable only sensor 1
-            print("Checking sensor1...", flush=True)
+            print("Reading Sensor 1...", flush=True)
             if self.sensor1 is not None:
-                print("Sensor1 is not None, reading...", flush=True)
-                self.xshut1.value = True
-                self.xshut2.value = False
-                print("XSHUT pins set for sensor 1", flush=True)
-                time.sleep(0.05)  # Small delay for sensor to stabilize
-                print("About to read sensor1.range", flush=True)
-                
                 try:
+                    self.xshut1.value = True
+                    self.xshut2.value = False
+                    print("  Sensor 1 XSHUT enabled, Sensor 2 disabled", flush=True)
+                    time.sleep(0.2)  # Increased delay for sensor stabilization
+                    
+                    print("  Attempting to read Sensor 1 range...", flush=True)
                     distance_mm_1 = self.sensor1.range
-                    print(f"Sensor1 range read: {distance_mm_1}", flush=True)
-                except Exception as range_error:
-                    print(f"ERROR reading sensor1.range: {range_error}", flush=True)
+                    print(f"  SUCCESS: Sensor 1 range = {distance_mm_1} mm", flush=True)
+                    distance_cm_1 = distance_mm_1 / 10.0
+                    
+                    # Publish as Float32
+                    msg_float = Float32()
+                    msg_float.data = distance_cm_1
+                    self.publisher_1.publish(msg_float)
+                    
+                    # Publish as Range message
+                    msg_range = Range()
+                    msg_range.header.stamp = self.get_clock().now().to_msg()
+                    msg_range.header.frame_id = "tof_link_1"
+                    msg_range.radiation_type = Range.INFRARED
+                    msg_range.field_of_view = 0.471
+                    msg_range.min_range = 0.0
+                    msg_range.max_range = 2.0
+                    msg_range.range = distance_cm_1 / 100.0
+                    self.range_pub_1.publish(msg_range)
+                    
+                    print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
+                except Exception as e:
+                    print(f"  ERROR reading Sensor 1: {e}", flush=True)
                     import traceback
                     traceback.print_exc()
-                    distance_mm_1 = 0
-                
-                distance_cm_1 = distance_mm_1 / 10.0
-                
-                # Publish as Float32
-                msg_float = Float32()
-                msg_float.data = distance_cm_1
-                self.publisher_1.publish(msg_float)
-                
-                # Publish as Range message
-                msg_range = Range()
-                msg_range.header.stamp = self.get_clock().now().to_msg()
-                msg_range.header.frame_id = "tof_link_1"
-                msg_range.radiation_type = Range.INFRARED
-                msg_range.field_of_view = 0.471  # ~27 degrees in radians for VL53L0X
-                msg_range.min_range = 0.0
-                msg_range.max_range = 2.0  # 2 meters
-                msg_range.range = distance_cm_1 / 100.0  # Convert to meters
-                self.range_pub_1.publish(msg_range)
-                
-                print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
-            else:
-                print("Sensor1 is None!", flush=True)
+            
+            time.sleep(0.1)  # Delay between sensor reads
             
             # Read from sensor 2 - enable only sensor 2
-            print("Checking sensor2...", flush=True)
+            print("Reading Sensor 2...", flush=True)
             if self.sensor2 is not None:
-                print("Sensor2 is not None, reading...", flush=True)
-                self.xshut1.value = False
-                self.xshut2.value = True
-                print("XSHUT pins set for sensor 2", flush=True)
-                time.sleep(0.05)  # Small delay for sensor to stabilize
-                print("About to read sensor2.range", flush=True)
-                
                 try:
+                    self.xshut1.value = False
+                    self.xshut2.value = True
+                    print("  Sensor 1 disabled, Sensor 2 XSHUT enabled", flush=True)
+                    time.sleep(0.2)  # Increased delay for sensor stabilization
+                    
+                    print("  Attempting to read Sensor 2 range...", flush=True)
                     distance_mm_2 = self.sensor2.range
-                    print(f"Sensor2 range read: {distance_mm_2}", flush=True)
-                except Exception as range_error:
-                    print(f"ERROR reading sensor2.range: {range_error}", flush=True)
+                    print(f"  SUCCESS: Sensor 2 range = {distance_mm_2} mm", flush=True)
+                    distance_cm_2 = distance_mm_2 / 10.0
+                    
+                    # Publish as Float32
+                    msg_float = Float32()
+                    msg_float.data = distance_cm_2
+                    self.publisher_2.publish(msg_float)
+                    
+                    # Publish as Range message
+                    msg_range = Range()
+                    msg_range.header.stamp = self.get_clock().now().to_msg()
+                    msg_range.header.frame_id = "tof_link_2"
+                    msg_range.radiation_type = Range.INFRARED
+                    msg_range.field_of_view = 0.471
+                    msg_range.min_range = 0.0
+                    msg_range.max_range = 2.0
+                    msg_range.range = distance_cm_2 / 100.0
+                    self.range_pub_2.publish(msg_range)
+                    
+                    print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
+                except Exception as e:
+                    print(f"  ERROR reading Sensor 2: {e}", flush=True)
                     import traceback
                     traceback.print_exc()
-                    distance_mm_2 = 0
-                
-                distance_cm_2 = distance_mm_2 / 10.0
-                
-                # Publish as Float32
-                msg_float = Float32()
-                msg_float.data = distance_cm_2
-                self.publisher_2.publish(msg_float)
-                
-                # Publish as Range message
-                msg_range = Range()
-                msg_range.header.stamp = self.get_clock().now().to_msg()
-                msg_range.header.frame_id = "tof_link_2"
-                msg_range.radiation_type = Range.INFRARED
-                msg_range.field_of_view = 0.471
-                msg_range.min_range = 0.0
-                msg_range.max_range = 2.0
-                msg_range.range = distance_cm_2 / 100.0
-                self.range_pub_2.publish(msg_range)
-                
-                print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
-            else:
-                print("Sensor2 is None!", flush=True)
             
             # Print combined readings
             print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<", flush=True)
