@@ -115,7 +115,8 @@ class TOFTestNode(Node):
                 msg_range.range = distance_cm_1 / 100.0  # Convert to meters
                 self.range_pub_1.publish(msg_range)
                 
-                self.get_logger().debug(f"Sensor 1: {distance_cm_1:.2f} cm")
+                print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)")
+                self.get_logger().info(f"Sensor 1: {distance_cm_1:.2f} cm")
             
             # Read from sensor 2 - enable only sensor 2
             if self.sensor2:
@@ -142,7 +143,11 @@ class TOFTestNode(Node):
                 msg_range.range = distance_cm_2 / 100.0
                 self.range_pub_2.publish(msg_range)
                 
-                self.get_logger().debug(f"Sensor 2: {distance_cm_2:.2f} cm")
+                print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)")
+                self.get_logger().info(f"Sensor 2: {distance_cm_2:.2f} cm")
+            
+            # Print combined readings
+            print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<")
             
             # Keep both enabled for next cycle
             self.xshut1.value = True
