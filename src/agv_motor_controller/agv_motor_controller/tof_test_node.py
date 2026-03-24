@@ -86,17 +86,23 @@ class TOFTestNode(Node):
     def read_distance(self):
         """Read distance from both TOF sensors using XSHUT switching."""
         try:
+            print("\n=== Reading ===", flush=True)
             distance_cm_1 = 0
             distance_cm_2 = 0
             
             # Read from Sensor 1 (disable sensor 2)
+            print("Step 1: Setting XSHUT for Sensor 1...", flush=True)
             if self.sensor1 is not None:
                 try:
+                    print("  Setting pins: S1=True, S2=False", flush=True)
                     self.xshut1.value = True
                     self.xshut2.value = False
-                    time.sleep(0.01)  # Brief delay for sensor to respond
+                    print("  Pins set, sleeping 0.05s...", flush=True)
+                    time.sleep(0.05)  
                     
+                    print("  About to read Sensor 1.range...", flush=True)
                     distance_mm_1 = self.sensor1.range
+                    print(f"  Got: {distance_mm_1} mm", flush=True)
                     distance_cm_1 = distance_mm_1 / 10.0
                     
                     # Publish
@@ -107,15 +113,22 @@ class TOFTestNode(Node):
                     print(f"Sensor 1: {distance_cm_1:.2f} cm", end=" | ", flush=True)
                 except Exception as e:
                     print(f"ERROR Sensor 1: {e}", end=" | ", flush=True)
+                    import traceback
+                    traceback.print_exc()
             
             # Read from Sensor 2 (disable sensor 1)
+            print("\nStep 2: Setting XSHUT for Sensor 2...", flush=True)
             if self.sensor2 is not None:
                 try:
+                    print("  Setting pins: S1=False, S2=True", flush=True)
                     self.xshut1.value = False
                     self.xshut2.value = True
-                    time.sleep(0.01)  # Brief delay for sensor to respond
+                    print("  Pins set, sleeping 0.05s...", flush=True)
+                    time.sleep(0.05)  
                     
+                    print("  About to read Sensor 2.range...", flush=True)
                     distance_mm_2 = self.sensor2.range
+                    print(f"  Got: {distance_mm_2} mm", flush=True)
                     distance_cm_2 = distance_mm_2 / 10.0
                     
                     # Publish
@@ -126,15 +139,21 @@ class TOFTestNode(Node):
                     print(f"Sensor 2: {distance_cm_2:.2f} cm", flush=True)
                 except Exception as e:
                     print(f"ERROR Sensor 2: {e}", flush=True)
+                    import traceback
+                    traceback.print_exc()
             else:
                 print("Sensor 2: Not initialized", flush=True)
             
             # Re-enable both sensors for next cycle
+            print("Step 3: Enable both sensors...", flush=True)
             self.xshut1.value = True
             self.xshut2.value = True
+            print("Done with this cycle", flush=True)
             
         except Exception as e:
             print(f"ERROR in read_distance: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             self.get_logger().error(f"Error reading sensors: {e}")
 
 
