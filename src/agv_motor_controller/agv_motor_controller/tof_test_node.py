@@ -49,38 +49,53 @@ class TOFTestNode(Node):
             raise
 
     def initialize_dual_sensors(self):
-        """Initialize two TOF sensors with different I2C addresses."""
+        """Initialize two TOF sensors using XSHUT multiplexing.
+        
+        Note: VL53L0X sensors cannot change I2C addresses.
+        Both run at 0x29, but we control them with XSHUT pins.
+        """
         # Initialize I2C bus
-        i2c = busio.I2C(board.SCL, board.SDA)
+        self.i2c = busio.I2C(board.SCL, board.SDA)
         
         # Setup XSHUT GPIO pins
-        xshut1 = digitalio.DigitalInOut(self.XSHUT_PIN_1)
-        xshut2 = digitalio.DigitalInOut(self.XSHUT_PIN_2)
-        xshut1.direction = digitalio.Direction.OUTPUT
-        xshut2.direction = digitalio.Direction.OUTPUT
+        self.xshut1 = digitalio.DigitalInOut(self.XSHUT_PIN_1)
+        self.xshut2 = digitalio.DigitalInOut(self.XSHUT_PIN_2)
+        self.xshut1.direction = digitalio.Direction.OUTPUT
+        self.xshut2.direction = digitalio.Direction.OUTPUT
         
         # Power down both sensors
-        xshut1.value = False
-        xshut2.value = False
-        time.sleep(0.1)
+        self.xshut1.value = False
+        self.xshut2.value = False
+        time.sleep(0.2)
         
-        # Initialize sensor 1 with default address (0x29)
-        xshut1.value = True
-        time.sleep(0.1)
-        self.sensor1 = VL53L0X(i2c)
+        # Initialize sensor 1 - enable only sensor 1
+        self.xshut1.value = True
+        self.xshut2.value = False
+        time.sleep(0.3)
+        self.sensor1 = VL53L0X(self.i2c)
         self.get_logger().info(f"Sensor 1 initialized at address 0x{self.SENSOR1_ADDRESS:02x}")
         
-        # Initialize sensor 2 and change its address to 0x30
-        xshut2.value = True
+        # Initialize sensor 2 - enable only sensor 2
+        self.xshut1.value = False
+        self.xshut2.value = True
+        time.sleep(0.3)
+        self.sensor2 = VL53L0X(self.i2c)
+        self.get_logger().info(f"Sensor 2 initialized at address 0x{self.SENSOR2_ADDRESS:02x} (using XSHUT multiplexing)")
+        
+        # Enable both sensors for normal operation
+        self.xshut1.value = True
+        self.xshut2.value = True
         time.sleep(0.1)
-        self.sensor2 = VL53L0X(i2c, address=self.SENSOR2_ADDRESS)
-        self.get_logger().info(f"Sensor 2 initialized at address 0x{self.SENSOR2_ADDRESS:02x}")
 
     def read_distances(self):
-        """Read distance from both TOF sensors and publish them."""
+        """Read distance from both TOF sensors using XSHUT multiplexing and publish them."""
         try:
-            # Read from sensor 1
+            # Read from sensor 1 - enable only sensor 1
             if self.sensor1:
+                self.xshut1.value = True
+                self.xshut2.value = False
+                time.sleep(0.05)  # Small delay for sensor to stabilize
+                
                 distance_mm_1 = self.sensor1.range
                 distance_cm_1 = distance_mm_1 / 10.0
                 
@@ -102,8 +117,12 @@ class TOFTestNode(Node):
                 
                 self.get_logger().debug(f"Sensor 1: {distance_cm_1:.2f} cm")
             
-            # Read from sensor 2
+            # Read from sensor 2 - enable only sensor 2
             if self.sensor2:
+                self.xshut1.value = False
+                self.xshut2.value = True
+                time.sleep(0.05)  # Small delay for sensor to stabilize
+                
                 distance_mm_2 = self.sensor2.range
                 distance_cm_2 = distance_mm_2 / 10.0
                 
@@ -124,6 +143,10 @@ class TOFTestNode(Node):
                 self.range_pub_2.publish(msg_range)
                 
                 self.get_logger().debug(f"Sensor 2: {distance_cm_2:.2f} cm")
+            
+            # Keep both enabled for next cycle
+            self.xshut1.value = True
+            self.xshut2.value = True
                 
             self.get_logger().info(f"Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm")
             
