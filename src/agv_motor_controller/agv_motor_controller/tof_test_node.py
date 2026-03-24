@@ -91,11 +91,16 @@ class TOFTestNode(Node):
         """Read distance from both TOF sensors using XSHUT multiplexing and publish them."""
         try:
             print("=== Reading Sensors ===", flush=True)
+            print(f"sensor1 is None: {self.sensor1 is None}", flush=True)
+            print(f"sensor2 is None: {self.sensor2 is None}", flush=True)
+            
             distance_cm_1 = 0
             distance_cm_2 = 0
             
             # Read from sensor 1 - enable only sensor 1
-            if self.sensor1:
+            print("Checking sensor1...", flush=True)
+            if self.sensor1 is not None:
+                print("Sensor1 is not None, reading...", flush=True)
                 self.xshut1.value = True
                 self.xshut2.value = False
                 time.sleep(0.05)  # Small delay for sensor to stabilize
@@ -120,9 +125,13 @@ class TOFTestNode(Node):
                 self.range_pub_1.publish(msg_range)
                 
                 print(f"[Sensor 1] Distance: {distance_cm_1:.2f} cm ({distance_mm_1} mm)", flush=True)
+            else:
+                print("Sensor1 is None!", flush=True)
             
             # Read from sensor 2 - enable only sensor 2
-            if self.sensor2:
+            print("Checking sensor2...", flush=True)
+            if self.sensor2 is not None:
+                print("Sensor2 is not None, reading...", flush=True)
                 self.xshut1.value = False
                 self.xshut2.value = True
                 time.sleep(0.05)  # Small delay for sensor to stabilize
@@ -147,6 +156,8 @@ class TOFTestNode(Node):
                 self.range_pub_2.publish(msg_range)
                 
                 print(f"[Sensor 2] Distance: {distance_cm_2:.2f} cm ({distance_mm_2} mm)", flush=True)
+            else:
+                print("Sensor2 is None!", flush=True)
             
             # Print combined readings
             print(f">>> Sensor 1: {distance_cm_1:.2f} cm | Sensor 2: {distance_cm_2:.2f} cm <<<", flush=True)
@@ -157,6 +168,8 @@ class TOFTestNode(Node):
                 
         except Exception as e:
             print(f"ERROR in read_distances: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             self.get_logger().error(f"Error reading sensors: {e}")
 
 
