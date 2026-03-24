@@ -103,9 +103,19 @@ class TOFTestNode(Node):
                 print("Sensor1 is not None, reading...", flush=True)
                 self.xshut1.value = True
                 self.xshut2.value = False
+                print("XSHUT pins set for sensor 1", flush=True)
                 time.sleep(0.05)  # Small delay for sensor to stabilize
+                print("About to read sensor1.range", flush=True)
                 
-                distance_mm_1 = self.sensor1.range
+                try:
+                    distance_mm_1 = self.sensor1.range
+                    print(f"Sensor1 range read: {distance_mm_1}", flush=True)
+                except Exception as range_error:
+                    print(f"ERROR reading sensor1.range: {range_error}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    distance_mm_1 = 0
+                
                 distance_cm_1 = distance_mm_1 / 10.0
                 
                 # Publish as Float32
@@ -134,9 +144,19 @@ class TOFTestNode(Node):
                 print("Sensor2 is not None, reading...", flush=True)
                 self.xshut1.value = False
                 self.xshut2.value = True
+                print("XSHUT pins set for sensor 2", flush=True)
                 time.sleep(0.05)  # Small delay for sensor to stabilize
+                print("About to read sensor2.range", flush=True)
                 
-                distance_mm_2 = self.sensor2.range
+                try:
+                    distance_mm_2 = self.sensor2.range
+                    print(f"Sensor2 range read: {distance_mm_2}", flush=True)
+                except Exception as range_error:
+                    print(f"ERROR reading sensor2.range: {range_error}", flush=True)
+                    import traceback
+                    traceback.print_exc()
+                    distance_mm_2 = 0
+                
                 distance_cm_2 = distance_mm_2 / 10.0
                 
                 # Publish as Float32
