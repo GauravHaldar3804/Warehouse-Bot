@@ -14,8 +14,8 @@ class DualVL53L0XNode(Node):
     def __init__(self):
         super().__init__('tof_test_node_2')
 
-        self.xshut1 = 16
-        self.xshut2 = 20
+        self.xshut1 = 22
+        self.xshut2 = 27
         self.publish_rate = 15.0   # lowered a bit for stability
 
         GPIO.setwarnings(False)
