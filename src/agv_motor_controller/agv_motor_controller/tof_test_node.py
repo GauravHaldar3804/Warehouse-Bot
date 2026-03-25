@@ -104,6 +104,7 @@ class TOFTestNode(Node):
                 try:
                     distance_mm_1 = self.sensor1.range
                     distance_cm_1 = distance_mm_1 / 10.0
+                    s1_addr = self.sensor1.address if hasattr(self.sensor1, 'address') else "N/A"
                     msg = Float32()
                     msg.data = distance_cm_1
                     self.publisher_1.publish(msg)
@@ -115,6 +116,7 @@ class TOFTestNode(Node):
                 try:
                     distance_mm_2 = self.sensor2.range
                     distance_cm_2 = distance_mm_2 / 10.0
+                    s2_addr = self.sensor2.address if hasattr(self.sensor2, 'address') else "N/A"
                     msg = Float32()
                     msg.data = distance_cm_2
                     self.publisher_2.publish(msg)
@@ -132,8 +134,11 @@ class TOFTestNode(Node):
             #     except Exception as e:
             #         self.get_logger().error(f"Sensor 3 error: {e}")
             
-            # Display readings
-            print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
+            # Display readings with address info
+            try:
+                print(f"[ADDRS] S1: {self.sensor1.address if hasattr(self.sensor1, 'address') else 'N/A'} | S2: {self.sensor2.address if hasattr(self.sensor2, 'address') else 'N/A'} | TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
+            except:
+                print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
             
         except Exception as e:
             self.get_logger().error(f"Error reading sensors: {e}")
