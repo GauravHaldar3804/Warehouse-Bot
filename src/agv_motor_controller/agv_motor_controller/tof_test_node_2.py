@@ -82,30 +82,27 @@ class DualVL53L0XNode(Node):
             dist1 = None
             dist2 = None
 
-            # Read Sensor 1 (S1 on, S2 off)
+            # Read Sensor 1
             if self.vl53_1 is not None:
                 try:
-                    GPIO.output(self.xshut1, GPIO.HIGH)
-                    GPIO.output(self.xshut2, GPIO.LOW)
-                    time.sleep(0.05)
                     dist1 = self.vl53_1.distance
+                    print(f"S1: {dist1}mm", flush=True)
                 except Exception as e:
                     self.get_logger().warn(f'Sensor 1 read error: {e}')
 
-            # Read Sensor 2 (S2 on, S1 off)
+            # Small delay between reads
+            time.sleep(0.01)
+
+            # Read Sensor 2
             if self.vl53_2 is not None:
                 try:
-                    GPIO.output(self.xshut1, GPIO.LOW)
-                    GPIO.output(self.xshut2, GPIO.HIGH)
-                    time.sleep(0.05)
                     dist2 = self.vl53_2.distance
+                    print(f"S2: {dist2}mm", flush=True)
                 except Exception as e:
                     self.get_logger().warn(f'Sensor 2 read error: {e}')
 
             self.publish_range(dist1, self.pub1, 'vl53l0x_sensor1')
             self.publish_range(dist2, self.pub2, 'vl53l0x_sensor2')
-            
-            print(f"S1: {dist1}mm | S2: {dist2}mm", flush=True)
         except Exception as e:
             self.get_logger().warn(f'Read error: {e}')
 
