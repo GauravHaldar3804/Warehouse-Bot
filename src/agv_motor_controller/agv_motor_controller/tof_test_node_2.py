@@ -16,7 +16,7 @@ class DualVL53L0XNode(Node):
 
         self.xshut1 = 22
         self.xshut2 = 27
-        self.publish_rate = 15.0   # lowered a bit for stability
+        self.publish_rate = 10.0
 
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BCM)
@@ -28,28 +28,35 @@ class DualVL53L0XNode(Node):
         GPIO.output(self.xshut2, GPIO.LOW)
         time.sleep(0.2)
 
-        i2c = busio.I2C(board.SCL, board.SDA)
+        self.i2c = busio.I2C(board.SCL, board.SDA)
+        time.sleep(0.5)
 
-        # Sensor 1 - default address 0x29
+        # Initialize Sensor 1 (only S1 powered)
         GPIO.output(self.xshut1, GPIO.HIGH)
-        time.sleep(0.05)
+        GPIO.output(self.xshut2, GPIO.LOW)
+        time.sleep(0.3)
         try:
-            self.vl53_1 = adafruit_vl53l0x.VL53L0X(i2c)
+            self.vl53_1 = adafruit_vl53l0x.VL53L0X(self.i2c)
             self.get_logger().info('Sensor 1 initialized @ 0x29')
         except Exception as e:
             self.get_logger().error(f'Failed to init Sensor 1: {e}')
+            self.vl53_1 = None
 
-        # Sensor 2 - change address safely
+        # Initialize Sensor 2 (only S2 powered)
+        GPIO.output(self.xshut1, GPIO.LOW)
         GPIO.output(self.xshut2, GPIO.HIGH)
-        time.sleep(0.05)
+        time.sleep(0.3)
         try:
-            # First create with default address, then change
-            temp_sensor = adafruit_vl53l0x.VL53L0X(i2c)
-            temp_sensor.set_address(0x30)
-            self.vl53_2 = adafruit_vl53l0x.VL53L0X(i2c, address=0x30)
-            self.get_logger().info('Sensor 2 initialized @ 0x30')
+            self.vl53_2 = adafruit_vl53l0x.VL53L0X(self.i2c)
+            self.get_logger().info('Sensor 2 initialized @ 0x29')
         except Exception as e:
             self.get_logger().error(f'Failed to init Sensor 2: {e}')
+            self.vl53_2 = None
+
+        # Power up both for normal operation
+        GPIO.output(self.xshut1, GPIO.HIGH)
+        GPIO.output(self.xshut2, GPIO.HIGH)
+        time.sleep(0.2)
 
         self.pub1 = self.create_publisher(Range, '/vl53l0x/sensor1/range', 10)
         self.pub2 = self.create_publisher(Range, '/vl53l0x/sensor2/range', 10)
@@ -72,11 +79,33 @@ class DualVL53L0XNode(Node):
 
     def timer_callback(self):
         try:
-            dist1 = self.vl53_1.distance if hasattr(self, 'vl53_1') else None
-            dist2 = self.vl53_2.distance if hasattr(self, 'vl53_2') else None
+            dist1 = None
+            dist2 = None
+
+            # Read Sensor 1 (S1 on, S2 off)
+            if self.vl53_1 is not None:
+                try:
+                    GPIO.output(self.xshut1, GPIO.HIGH)
+                    GPIO.output(self.xshut2, GPIO.LOW)
+                    time.sleep(0.05)
+                    dist1 = self.vl53_1.distance
+                except Exception as e:
+                    self.get_logger().warn(f'Sensor 1 read error: {e}')
+
+            # Read Sensor 2 (S2 on, S1 off)
+            if self.vl53_2 is not None:
+                try:
+                    GPIO.output(self.xshut1, GPIO.LOW)
+                    GPIO.output(self.xshut2, GPIO.HIGH)
+                    time.sleep(0.05)
+                    dist2 = self.vl53_2.distance
+                except Exception as e:
+                    self.get_logger().warn(f'Sensor 2 read error: {e}')
 
             self.publish_range(dist1, self.pub1, 'vl53l0x_sensor1')
             self.publish_range(dist2, self.pub2, 'vl53l0x_sensor2')
+            
+            print(f"S1: {dist1}mm | S2: {dist2}mm", flush=True)
         except Exception as e:
             self.get_logger().warn(f'Read error: {e}')
 
