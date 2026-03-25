@@ -12,7 +12,7 @@ import adafruit_vl53l0x
 # GPIO pins for XSHUT
 XSHUT_1 = 22
 XSHUT_2 = 27
-# XSHUT_3 = 17  # Uncomment when 3rd sensor is available
+# XSHUT_3 = 23  # Uncomment when 3rd sensor is available
 
 class DualVL53L0X(Node):
     def __init__(self):
