@@ -56,32 +56,29 @@ class TOFTestNode(Node):
             # Initialize Sensor 1
             self.xshut1.value = True
             self.xshut2.value = False
-            time.sleep(0.1)
+            time.sleep(0.3)
             self.sensor1 = VL53L0X(self.i2c)
-            self.sensor1.address = 0x29  # Default address for Sensor 1
             self.get_logger().info("Sensor 1 initialized")
             
             # Initialize Sensor 2
             self.xshut1.value = False
             self.xshut2.value = True
-            time.sleep(0.1)
+            time.sleep(0.3)
             self.sensor2 = VL53L0X(self.i2c)
-            self.sensor2.address = 0x2B  # Change to different address for Sensor 2
             self.get_logger().info("Sensor 2 initialized")
             
             # # Initialize Sensor 3
             # self.xshut1.value = False
             # self.xshut2.value = False
             # self.xshut3.value = True
-            # time.sleep(0.1)
+            # time.sleep(0.3)
             # self.sensor3 = VL53L0X(self.i2c)
             # self.get_logger().info("Sensor 3 initialized")
             
-            # Enable all sensors for reading
-            self.xshut1.value = True
-            self.xshut2.value = True
-            # self.xshut3.value = True
-            time.sleep(0.1)
+            # Power down both sensors for proper startup
+            self.xshut1.value = False
+            self.xshut2.value = False
+            time.sleep(0.2)
             self.get_logger().info("TOF sensors ready")
             
         except Exception as e:
@@ -97,9 +94,10 @@ class TOFTestNode(Node):
             # Read from Sensor 1
             if self.sensor1 is not None:
                 try:
+                    # Power down Sensor 2, power up Sensor 1
                     self.xshut1.value = True
                     self.xshut2.value = False
-                    time.sleep(0.05)  
+                    time.sleep(0.1)  # Give sensor time to settle
                     distance_mm_1 = self.sensor1.range
                     distance_cm_1 = distance_mm_1 / 10.0
                     msg = Float32()
@@ -111,9 +109,10 @@ class TOFTestNode(Node):
             # Read from Sensor 2
             if self.sensor2 is not None:
                 try:
+                    # Power down Sensor 1, power up Sensor 2
                     self.xshut1.value = False
                     self.xshut2.value = True
-                    time.sleep(0.05)  
+                    time.sleep(0.1)  # Give sensor time to settle
                     distance_mm_2 = self.sensor2.range
                     distance_cm_2 = distance_mm_2 / 10.0
                     msg = Float32()
@@ -128,7 +127,7 @@ class TOFTestNode(Node):
             #         self.xshut1.value = False
             #         self.xshut2.value = False
             #         self.xshut3.value = True
-            #         time.sleep(0.05)  
+            #         time.sleep(0.1)
             #         distance_mm_3 = self.sensor3.range
             #         distance_cm_3 = distance_mm_3 / 10.0
             #         msg = Float32()
@@ -139,11 +138,6 @@ class TOFTestNode(Node):
             
             # Display readings
             print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
-            
-            # Re-enable both sensors for next cycle
-            self.xshut1.value = True
-            self.xshut2.value = True
-            # self.xshut3.value = True
             
         except Exception as e:
             self.get_logger().error(f"Error reading sensors: {e}")
