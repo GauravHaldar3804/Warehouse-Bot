@@ -82,11 +82,6 @@ class TOFTestNode(Node):
             self.xshut1.value = False
             self.xshut2.value = False
             time.sleep(0.2)
-            
-            # Power up both sensors for simultaneous operation
-            self.xshut1.value = True
-            self.xshut2.value = True
-            time.sleep(0.2)
             self.get_logger().info("TOF sensors ready")
             
         except Exception as e:
@@ -94,29 +89,37 @@ class TOFTestNode(Node):
             raise
 
     def read_distance(self):
-        """Read distance from both TOF sensors with different I2C addresses."""
+        """Read distance from both TOF sensors using XSHUT switching."""
         try:
             distance_cm_1 = 0
             distance_cm_2 = 0
             
-            # Read from Sensor 1 (address 0x2B)
+            # Read from Sensor 1
             if self.sensor1 is not None:
                 try:
+                    # Isolate Sensor 1: power up S1, power down S2
+                    self.xshut1.value = True
+                    self.xshut2.value = False
+                    time.sleep(0.2)  # Wait for sensor to stabilize
+                    
                     distance_mm_1 = self.sensor1.range
                     distance_cm_1 = distance_mm_1 / 10.0
-                    s1_addr = self.sensor1.address if hasattr(self.sensor1, 'address') else "N/A"
                     msg = Float32()
                     msg.data = distance_cm_1
                     self.publisher_1.publish(msg)
                 except Exception as e:
                     self.get_logger().error(f"Sensor 1 error: {e}")
             
-            # Read from Sensor 2 (address 0x29)
+            # Read from Sensor 2
             if self.sensor2 is not None:
                 try:
+                    # Isolate Sensor 2: power down S1, power up S2
+                    self.xshut1.value = False
+                    self.xshut2.value = True
+                    time.sleep(0.2)  # Wait for sensor to stabilize
+                    
                     distance_mm_2 = self.sensor2.range
                     distance_cm_2 = distance_mm_2 / 10.0
-                    s2_addr = self.sensor2.address if hasattr(self.sensor2, 'address') else "N/A"
                     msg = Float32()
                     msg.data = distance_cm_2
                     self.publisher_2.publish(msg)
@@ -126,6 +129,10 @@ class TOFTestNode(Node):
             # # Read from Sensor 3
             # if self.sensor3 is not None:
             #     try:
+            #         self.xshut1.value = False
+            #         self.xshut2.value = False
+            #         self.xshut3.value = True
+            #         time.sleep(0.2)
             #         distance_mm_3 = self.sensor3.range
             #         distance_cm_3 = distance_mm_3 / 10.0
             #         msg = Float32()
@@ -134,11 +141,8 @@ class TOFTestNode(Node):
             #     except Exception as e:
             #         self.get_logger().error(f"Sensor 3 error: {e}")
             
-            # Display readings with address info
-            try:
-                print(f"[ADDRS] S1: {self.sensor1.address if hasattr(self.sensor1, 'address') else 'N/A'} | S2: {self.sensor2.address if hasattr(self.sensor2, 'address') else 'N/A'} | TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
-            except:
-                print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
+            # Display readings
+            print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
             
         except Exception as e:
             self.get_logger().error(f"Error reading sensors: {e}")
