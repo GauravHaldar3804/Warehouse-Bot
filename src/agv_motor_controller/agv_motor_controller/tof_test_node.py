@@ -135,7 +135,8 @@ class TOFTestNode(Node):
             #     except Exception as e:
             #         self.get_logger().error(f"Sensor 3 error: {e}")
             
-            # Display readings
+            # Display readings with debug info
+            print(f"[DEBUG] XSHUT1={self.xshut1.value} XSHUT2={self.xshut2.value} | S1_raw={distance_mm_1 if self.sensor1 else 'N/A'}mm | S2_raw={distance_mm_2 if self.sensor2 else 'N/A'}mm", flush=True)
             print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
             
             # Re-enable both sensors for next cycle
