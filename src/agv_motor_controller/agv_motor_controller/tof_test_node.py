@@ -40,29 +40,30 @@ class TOFTestNode(Node):
             
             # Initialize I2C bus
             self.i2c = busio.I2C(board.SCL, board.SDA)
+            time.sleep(0.5)  # Give I2C bus time to stabilize
             
             # Power down both sensors
             self.xshut1.value = False
             self.xshut2.value = False
-            time.sleep(0.2)
+            time.sleep(0.5)
             
             # Initialize Sensor 1 (only S1 powered)
             self.xshut1.value = True
             self.xshut2.value = False
-            time.sleep(0.3)
+            time.sleep(0.5)  # Extended wait for sensor to power up
             self.sensor1 = VL53L0X(self.i2c)
             self.get_logger().info("Sensor 1 initialized")
             
             # Initialize Sensor 2 (only S2 powered)
             self.xshut1.value = False
             self.xshut2.value = True
-            time.sleep(0.3)
+            time.sleep(0.5)  # Extended wait for sensor to power up
             self.sensor2 = VL53L0X(self.i2c)
             self.get_logger().info("Sensor 2 initialized")
             
-            # Power down both sensors for normal operation
-            self.xshut1.value = False
-            self.xshut2.value = False
+            # Keep both sensors powered on for normal operation
+            self.xshut1.value = True
+            self.xshut2.value = True
             time.sleep(0.2)
             self.get_logger().info("TOF sensors ready")
             
@@ -81,7 +82,7 @@ class TOFTestNode(Node):
                 try:
                     self.xshut1.value = True
                     self.xshut2.value = False
-                    time.sleep(0.05)
+                    time.sleep(0.08)
                     distance_mm_1 = self.sensor1.range
                     distance_cm_1 = distance_mm_1 / 10.0
                     msg = Float32()
@@ -95,7 +96,7 @@ class TOFTestNode(Node):
                 try:
                     self.xshut1.value = False
                     self.xshut2.value = True
-                    time.sleep(0.05)
+                    time.sleep(0.08)
                     distance_mm_2 = self.sensor2.range
                     distance_cm_2 = distance_mm_2 / 10.0
                     msg = Float32()
@@ -106,10 +107,6 @@ class TOFTestNode(Node):
             
             # Display readings
             print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
-            
-            # Power down both after reading
-            self.xshut1.value = False
-            self.xshut2.value = False
             
         except Exception as e:
             self.get_logger().error(f"Error reading sensors: {e}")
