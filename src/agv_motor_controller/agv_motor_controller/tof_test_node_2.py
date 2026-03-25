@@ -62,15 +62,20 @@ class DualVL53L0X(Node):
             msg1.data = float(dist1)
         except:
             msg1.data = -1.0
+            dist1 = -1
 
         try:
             dist2 = self.sensor2.range
             msg2.data = float(dist2)
         except:
             msg2.data = -1.0
+            dist2 = -1
 
         self.pub1.publish(msg1)
         self.pub2.publish(msg2)
+        
+        # Print values to terminal
+        print(f"TOF Distance [mm]  |  Sensor 1: {dist1:6.1f}  |  Sensor 2: {dist2:6.1f}", flush=True)
 
     def destroy_node(self):
         GPIO.cleanup()
