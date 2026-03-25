@@ -29,6 +29,7 @@ setup(
         'imu6050_node = agv_motor_controller.imu6050_node:main',
         'imu_node = agv_motor_controller.imu_node:main',
         'tof_test = agv_motor_controller.tof_test_node:main',
+        'tof_test_2 = agv_motor_controller.tof_test_node_2:main',
         'line_follower = agv_motor_controller.line_follower_node:main',
     ],
 },
