@@ -15,8 +15,8 @@ class TOFTestNode(Node):
         super().__init__('tof_test_node')
         
         # GPIO pins for XSHUT control
-        self.XSHUT_PIN_1 = board.D4   # GPIO 4
-        self.XSHUT_PIN_2 = board.D5   # GPIO 5
+        self.XSHUT_PIN_1 = board.D27  # GPIO 27
+        self.XSHUT_PIN_2 = board.D22   # GPIO 22
         
         # Create publishers for distance measurements (in cm)
         self.publisher_1 = self.create_publisher(Float32, 'tof_distance_1', 10)
