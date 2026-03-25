@@ -66,7 +66,7 @@ class TOFTestNode(Node):
             self.xshut2.value = True
             time.sleep(0.1)
             self.sensor2 = VL53L0X(self.i2c)
-            self.sensor2.address = 0x30  # Change to different address for Sensor 2
+            self.sensor2.address = 0x2B  # Change to different address for Sensor 2
             self.get_logger().info("Sensor 2 initialized")
             
             # # Initialize Sensor 3
