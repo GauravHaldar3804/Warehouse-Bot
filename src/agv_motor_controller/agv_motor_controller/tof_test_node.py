@@ -58,6 +58,7 @@ class TOFTestNode(Node):
             self.xshut2.value = False
             time.sleep(0.1)
             self.sensor1 = VL53L0X(self.i2c)
+            self.sensor1.address = 0x29  # Default address for Sensor 1
             self.get_logger().info("Sensor 1 initialized")
             
             # Initialize Sensor 2
@@ -65,6 +66,7 @@ class TOFTestNode(Node):
             self.xshut2.value = True
             time.sleep(0.1)
             self.sensor2 = VL53L0X(self.i2c)
+            self.sensor2.address = 0x30  # Change to different address for Sensor 2
             self.get_logger().info("Sensor 2 initialized")
             
             # # Initialize Sensor 3
@@ -135,8 +137,7 @@ class TOFTestNode(Node):
             #     except Exception as e:
             #         self.get_logger().error(f"Sensor 3 error: {e}")
             
-            # Display readings with debug info
-            print(f"[DEBUG] XSHUT1={self.xshut1.value} XSHUT2={self.xshut2.value} | S1_raw={distance_mm_1 if self.sensor1 else 'N/A'}mm | S2_raw={distance_mm_2 if self.sensor2 else 'N/A'}mm", flush=True)
+            # Display readings
             print(f"TOF Sensors [cm]  |  S1: {distance_cm_1:6.2f}  |  S2: {distance_cm_2:6.2f}", flush=True)
             
             # Re-enable both sensors for next cycle
