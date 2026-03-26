@@ -12,8 +12,8 @@ I2C_ADDRESS = 0x40
 SERVO_1_CHANNEL = 4
 SERVO_2_CHANNEL = 5
 
-# Servo PWM calibration for standard servos
-# Adjust these values if your servo doesn't reach full range
+# Servo PWM calibration - SG90 servos
+# SG90 uses: 1.0 - 2.0 ms pulse width
 MIN_PULSE_MS = 1.0      # Pulse width for 0°
 MAX_PULSE_MS = 2.0      # Pulse width for 180°
 
