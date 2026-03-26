@@ -14,8 +14,8 @@ SERVO_2_CHANNEL = 5
 
 # Servo PWM calibration - SG90 servos
 # SG90 uses: 1.0 - 2.0 ms pulse width
-MIN_PULSE_MS = 1.0      # Pulse width for 0°
-MAX_PULSE_MS = 2.0      # Pulse width for 180°
+MIN_PULSE_MS = 0.5     # Pulse width for 0°
+MAX_PULSE_MS = 2.5      # Pulse width for 180°
 
 
 class ServoControlNode(Node):
