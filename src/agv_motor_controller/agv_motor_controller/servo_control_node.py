@@ -4,7 +4,6 @@ import board
 import busio
 import time
 from adafruit_pca9685 import PCA9685
-from adafruit_servo import Servo
 
 # PCA9685 I2C Address
 I2C_ADDRESS = 0x40
@@ -12,6 +11,11 @@ I2C_ADDRESS = 0x40
 # Servo channels on PCA9685
 SERVO_1_CHANNEL = 4
 SERVO_2_CHANNEL = 5
+
+# Servo PWM calibration for standard servos
+# Adjust these values if your servo doesn't reach full range
+MIN_PULSE_MS = 1.0      # Pulse width for 0°
+MAX_PULSE_MS = 2.0      # Pulse width for 180°
 
 
 class ServoControlNode(Node):
@@ -29,26 +33,37 @@ class ServoControlNode(Node):
         self.get_logger().info('PCA9685 initialized at address 0x40')
         self.get_logger().info(f'Frequency set to {self.pca.frequency} Hz')
 
-        # Initialize Servo objects for intuitive angle control
-        self.servo1 = Servo(self.pca.channels[SERVO_1_CHANNEL], min_pulse=1000, max_pulse=2000)
-        self.servo2 = Servo(self.pca.channels[SERVO_2_CHANNEL], min_pulse=1000, max_pulse=2000)
-        
-        self.get_logger().info('Servo 1 initialized on channel 4')
-        self.get_logger().info('Servo 2 initialized on channel 5')
-
         # Start the servo control sequence
         self.run_servo_sequence()
 
-    def set_servo_angle(self, servo, servo_num, angle):
+    def angle_to_duty_cycle(self, angle):
+        """
+        Convert angle (0-180°) to duty cycle value for PCA9685.
+        
+        Args:
+            angle (int/float): Angle in degrees (0-180)
+            
+        Returns:
+            int: Duty cycle value (0-65535)
+        """
+        # Map angle 0-180 to pulse width MIN_PULSE_MS-MAX_PULSE_MS
+        # For 50Hz: period = 20ms, each ms = 3276.75 (65535/20)
+        ms_per_unit = 3276.75
+        pulse_ms = MIN_PULSE_MS + (angle / 180.0) * (MAX_PULSE_MS - MIN_PULSE_MS)
+        duty_cycle = int(pulse_ms * ms_per_unit)
+        return duty_cycle
+
+    def set_servo_angle(self, channel, servo_num, angle):
         """
         Set servo to a specific angle in degrees.
         
         Args:
-            servo (Servo): Servo object to control
-            servo_num (int): Servo number for logging
-            angle (int): Angle in degrees (0-180)
+            channel (int): PCA9685 channel number (4 or 5)
+            servo_num (int): Servo number for logging (1 or 2)
+            angle (int/float): Angle in degrees (0-180)
         """
-        servo.angle = angle
+        duty_cycle = self.angle_to_duty_cycle(angle)
+        self.pca.channels[channel].duty_cycle = duty_cycle
         self.get_logger().info(f'Servo {servo_num}: Set to {angle}°')
 
     def run_servo_sequence(self):
@@ -56,24 +71,24 @@ class ServoControlNode(Node):
         try:
             # Step 1: Both servos to 0 degrees
             self.get_logger().info('Step 1: Moving both servos to 0°')
-            self.set_servo_angle(self.servo1, 1, 0)
-            self.set_servo_angle(self.servo2, 2, 0)
+            self.set_servo_angle(SERVO_1_CHANNEL, 1, 0)
+            self.set_servo_angle(SERVO_2_CHANNEL, 2, 0)
             time.sleep(1.5)
 
             # Step 2: Servo 1 to 180 degrees
             self.get_logger().info('Step 2: Moving Servo 1 to 180°')
-            self.set_servo_angle(self.servo1, 1, 180)
+            self.set_servo_angle(SERVO_1_CHANNEL, 1, 180)
             time.sleep(1.5)
 
             # Step 3: Servo 2 to 180 degrees
             self.get_logger().info('Step 3: Moving Servo 2 to 180°')
-            self.set_servo_angle(self.servo2, 2, 180)
+            self.set_servo_angle(SERVO_2_CHANNEL, 2, 180)
             time.sleep(1.5)
 
             # Step 4: Both servos to 90 degrees
             self.get_logger().info('Step 4: Moving both servos to 90°')
-            self.set_servo_angle(self.servo1, 1, 90)
-            self.set_servo_angle(self.servo2, 2, 90)
+            self.set_servo_angle(SERVO_1_CHANNEL, 1, 90)
+            self.set_servo_angle(SERVO_2_CHANNEL, 2, 90)
             time.sleep(1.5)
 
             self.get_logger().info('Servo sequence completed!')
