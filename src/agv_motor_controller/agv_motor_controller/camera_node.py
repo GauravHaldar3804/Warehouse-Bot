@@ -194,6 +194,12 @@ class CameraNode(Node):
             except Exception as e:
                 self.get_logger().error(f'Error publishing image: {e}')
             
+            # Display raw image
+            if self.enable_vis:
+                cv2.imshow("Camera - ESP32 Stream", img)
+                if cv2.waitKey(1) == 27:  # ESC key to exit
+                    self.running = False
+            
             # Publish QR codes if detected
             if qr_data:
                 for qr in qr_data:
@@ -213,7 +219,7 @@ class CameraNode(Node):
                 return None
             
             detected_data = []
-            for qr_code in qr_codes:
+            for idx, qr_code in enumerate(qr_codes):
                 # Extract QR code data
                 data = qr_code.data.decode('utf-8')
                 detected_data.append(data)
@@ -229,7 +235,17 @@ class CameraNode(Node):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
                     )
                 
-                self.get_logger().info(f'QR Code detected: {data}')
+                # Print QR code data to console
+                print(f"\n{'='*60}")
+                print(f"QR Code #{idx + 1} Detected!")
+                print(f"{'='*60}")
+                print(f"Data: {data}")
+                print(f"Type: {qr_code.type}")
+                print(f"Position: x={qr_code.rect.left}, y={qr_code.rect.top}")
+                print(f"Size: width={qr_code.rect.width}, height={qr_code.rect.height}")
+                print(f"{'='*60}\n")
+                
+                self.get_logger().info(f'QR Code #{idx + 1} detected: {data}')
             
             return detected_data
         
@@ -243,6 +259,7 @@ class CameraNode(Node):
         self.receiver_thread.join(timeout=2.0)
         if self.sock:
             self.sock.close()
+        cv2.destroyAllWindows()
         super().destroy_node()
 
 
