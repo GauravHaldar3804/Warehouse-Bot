@@ -16,8 +16,13 @@ from cv_bridge import CvBridge
 try:
     from pyzbar.pyzbar import decode
     QR_CODE_AVAILABLE = True
-except ImportError:
+    PYZBAR_ERROR = None
+except ImportError as e:
     QR_CODE_AVAILABLE = False
+    PYZBAR_ERROR = str(e)
+except Exception as e:
+    QR_CODE_AVAILABLE = False
+    PYZBAR_ERROR = str(e)
 
 
 class CameraNode(Node):
@@ -30,18 +35,28 @@ class CameraNode(Node):
         self.declare_parameter('udp_ip', '0.0.0.0')
         self.declare_parameter('udp_port', 1234)
         self.declare_parameter('enable_qr_detection', True)
-        self.declare_parameter('enable_visualization', True)
+        self.declare_parameter('enable_visualization', False)
+        self.declare_parameter('save_frames', False)
+        self.declare_parameter('frame_save_dir', '/tmp/camera_frames')
         
         # Get parameters
         self.udp_ip = self.get_parameter('udp_ip').value
         self.udp_port = self.get_parameter('udp_port').value
         self.enable_qr = self.get_parameter('enable_qr_detection').value
         self.enable_vis = self.get_parameter('enable_visualization').value
+        self.save_frames = self.get_parameter('save_frames').value
+        self.frame_save_dir = self.get_parameter('frame_save_dir').value
+        
+        # Create frame save directory if needed
+        if self.save_frames:
+            import os
+            os.makedirs(self.frame_save_dir, exist_ok=True)
         
         if not QR_CODE_AVAILABLE and self.enable_qr:
             self.get_logger().warn(
-                'pyzbar not installed. QR code detection disabled. '
-                'Install with: pip install pyzbar'
+                f'pyzbar not installed. QR code detection disabled. '
+                f'Error: {PYZBAR_ERROR} | '
+                f'Install with: pip install pyzbar'
             )
             self.enable_qr = False
         
@@ -80,6 +95,10 @@ class CameraNode(Node):
             f'Camera node started - UDP {self.udp_ip}:{self.udp_port}'
         )
         self.get_logger().info(f'QR Detection: {"Enabled" if self.enable_qr else "Disabled"}')
+        self.get_logger().info(f'Visualization: {"Enabled" if self.enable_vis else "Disabled"}')
+        self.get_logger().info(f'Frame Saving: {"Enabled" if self.save_frames else "Disabled"}')
+        if self.save_frames:
+            self.get_logger().info(f'Saving frames to: {self.frame_save_dir}')
     
     def setup_socket(self):
         """Initialize UDP socket for receiving frames."""
@@ -196,9 +215,26 @@ class CameraNode(Node):
             
             # Display raw image
             if self.enable_vis:
-                cv2.imshow("Camera - ESP32 Stream", img)
-                if cv2.waitKey(1) == 27:  # ESC key to exit
-                    self.running = False
+                try:
+                    cv2.imshow("Camera - ESP32 Stream", img)
+                    if cv2.waitKey(1) == 27:  # ESC key to exit
+                        self.running = False
+                except Exception as e:
+                    # If display fails, log it once and disable visualization
+                    if self.enable_vis:
+                        self.get_logger().warn(
+                            f'Cannot display window (no X11 server?): {e}. '
+                            'Continuing without visualization.'
+                        )
+                        self.enable_vis = False
+            
+            # Save frames to disk if enabled
+            if self.save_frames:
+                try:
+                    frame_filename = f"{self.frame_save_dir}/frame_{self.frame_count:06d}.jpg"
+                    cv2.imwrite(frame_filename, img)
+                except Exception as e:
+                    self.get_logger().error(f'Error saving frame: {e}')
             
             # Publish QR codes if detected
             if qr_data:
