@@ -74,7 +74,7 @@ class MotorTestNode(Node):
         for motor_id in [1, 2, 3, 4]:
             # Forward
             self.get_logger().info(f"Motor {motor_id} Forward")
-            self.set_motor_speed(motor_id, forward_speed=0.5)
+            self.set_motor_speed(motor_id, forward_speed=0.8)
             time.sleep(2)
 
             # Stop
@@ -84,7 +84,7 @@ class MotorTestNode(Node):
 
             # Reverse
             self.get_logger().info(f"Motor {motor_id} Reverse")
-            self.set_motor_speed(motor_id, reverse_speed=0.5)
+            self.set_motor_speed(motor_id, reverse_speed=0.8)
             time.sleep(2)
 
             # Stop
