@@ -84,7 +84,7 @@ class MotorTestNode(Node):
 
             # Reverse
             self.get_logger().info(f"Motor {motor_id} Reverse")
-            self.set_motor_speed(motor_id, reverse_speed=0.)
+            self.set_motor_speed(motor_id, reverse_speed=0.8)
             time.sleep(2)
 
             # Stop
