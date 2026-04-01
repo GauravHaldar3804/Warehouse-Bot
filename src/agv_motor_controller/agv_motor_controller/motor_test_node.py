@@ -70,39 +70,31 @@ class MotorTestNode(Node):
             self.stop_motor(motor_id)
 
     def test_motor(self):
-        # Test Motor 1 only (PCA Channels 0 & 1) - one at a time
-        motor_id = 1
-        self.get_logger().info("=" * 50)
-        self.get_logger().info(f"Testing Motor {motor_id} (Channels 0 & 1)")
-        self.get_logger().info("=" * 50)
+        # Test all 4 motors
+        for motor_id in [1, 2, 3, 4]:
+            # Forward
+            self.get_logger().info(f"Motor {motor_id} Forward")
+            self.set_motor_speed(motor_id, forward_speed=0.8)
+            time.sleep(2)
 
-        # Test Forward (Channel 0)
-        self.get_logger().info(f"\n[1/4] Motor {motor_id} - FORWARD (Channel 0 active)")
-        self.get_logger().info("Speed: 80%")
-        self.set_motor_speed(motor_id, forward_speed=0.8)
-        time.sleep(3)
+            # Stop
+            self.get_logger().info(f"Motor {motor_id} Stop")
+            self.stop_motor(motor_id)
+            time.sleep(1)
 
-        # Stop
-        self.get_logger().info(f"\n[2/4] Motor {motor_id} - STOP")
-        self.stop_motor(motor_id)
-        time.sleep(2)
+            # Reverse
+            self.get_logger().info(f"Motor {motor_id} Reverse")
+            self.set_motor_speed(motor_id, reverse_speed=0.)
+            time.sleep(2)
 
-        # Test Reverse (Channel 1)
-        self.get_logger().info(f"\n[3/4] Motor {motor_id} - REVERSE (Channel 1 active)")
-        self.get_logger().info("Speed: 80%")
-        self.set_motor_speed(motor_id, reverse_speed=0.8)
-        time.sleep(3)
+            # Stop
+            self.get_logger().info(f"Motor {motor_id} Final Stop")
+            self.stop_motor(motor_id)
+            time.sleep(1)
 
-        # Final Stop
-        self.get_logger().info(f"\n[4/4] Motor {motor_id} - FINAL STOP")
-        self.stop_motor(motor_id)
-        time.sleep(1)
-
-        self.get_logger().info("\n" + "=" * 50)
-        self.get_logger().info("Motor test completed successfully!")
-        self.get_logger().info("=" * 50)
-        
+        self.get_logger().info("All motors test completed.")
         self.stop_all_motors()
+
         GPIO.cleanup()
         self.pca.deinit()
 
