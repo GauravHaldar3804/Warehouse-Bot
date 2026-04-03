@@ -43,6 +43,8 @@ setup(
         'line_follower = agv_motor_controller.line_follower_node:main',
         'servo_control = agv_motor_controller.servo_control_node:main',
         'camera_node = agv_motor_controller.camera_node:main',
+        'grid_path_planner_node = agv_motor_controller.grid_path_planner_node:main',
+        'path_result_monitor = agv_motor_controller.path_result_monitor:main',
     ],
 },
 )
