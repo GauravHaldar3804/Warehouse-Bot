@@ -120,10 +120,27 @@ class GridPathPlanner:
         
         node = self.nodes[node_label]
         neighbors = []
+
+        node_is_dock = node_label.startswith("DOC-")
+        node_dock_base = node_label[4:] if node_is_dock else None
         
         # Check all other nodes and find adjacent ones based on position
         for other_label, other_node in self.nodes.items():
             if other_node.is_obstacle or other_label == node_label:
+                continue
+
+            other_is_dock = other_label.startswith("DOC-")
+            other_dock_base = other_label[4:] if other_is_dock else None
+
+            # Dock edges are explicit: a dock can connect only to its own base
+            # horizontal intermediate node (DOC-AB2 <-> AB2). This prevents
+            # accidental links to above/below or side-adjacent nodes.
+            if node_is_dock:
+                if other_label == node_dock_base:
+                    neighbors.append(other_node)
+                continue
+
+            if other_is_dock and node_label != other_dock_base:
                 continue
             
             # Check if nodes are adjacent (distance ≈ 0.5 on grid)
