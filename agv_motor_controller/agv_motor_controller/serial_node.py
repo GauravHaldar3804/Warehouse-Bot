@@ -8,7 +8,7 @@ class SerialNode(Node):
         super().__init__('serial_node')
 
         # Open serial port (Arduino connection)
-        self.ser = serial.Serial('/dev/ttyUSB0', 115200)
+        self.ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
 
         # Publishers
         self.line_pub = self.create_publisher(Float32, '/line_error', 10)
@@ -19,21 +19,31 @@ class SerialNode(Node):
 
     def read_serial(self):
         try:
-            line = self.ser.readline().decode('utf-8').strip()
+            # Read and decode safely
+            line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+
+            # Ignore empty or debug lines
+            if not line or line.startswith('#'):
+                return
+
             data = line.split(',')
 
-            # Expecting: error, FL, RL, FR, RR, n0..n7
+            # Expect at least error + 4 encoder values
             if len(data) < 5:
                 return
 
-            # Line error
-            error = float(data[0])
+            # Safe conversion
+            try:
+                error = float(data[0])
+            except ValueError:
+                return
 
+            # Publish line error
             msg = Float32()
             msg.data = error
             self.line_pub.publish(msg)
 
-            # Encoder data (FL, RL, FR, RR)
+            # Publish encoder data
             enc_msg = String()
             enc_msg.data = ','.join(data[1:5])
             self.enc_pub.publish(enc_msg)
