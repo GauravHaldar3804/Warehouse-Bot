@@ -46,6 +46,7 @@ setup(
         'camera_test = agv_motor_controller.camera_test:main',
         'grid_path_planner_node = agv_motor_controller.grid_path_planner_node:main',
         'path_result_monitor = agv_motor_controller.path_result_monitor:main',
+        'serial_node = agv_motor_controller.serial_node:main',
     ],
 },
 )
