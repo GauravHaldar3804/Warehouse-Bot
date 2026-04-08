@@ -36,9 +36,12 @@ class TestMotorControlNode(Node):
         self.LEFT_MOTORS = [3, 4]
 
         self.base_speed = 0.7
-        self.Kp = 0.8
+        self.Kp = 1.2
         self.rotate_speed = 0.5
-        self.calibration_rotate_speed = 1.0
+        self.calibration_lateral_speed = 1.0
+        self.calibration_switch_interval_seconds = 0.8
+        self.calibration_direction = 1
+        self.calibration_last_switch_time = 0.0
         self.post_calibration_stop_seconds = 10.0
         self.calibration_active = False
         self.post_calibration_pause_until = 0.0
@@ -80,11 +83,22 @@ class TestMotorControlNode(Node):
         for motor_id in self.RIGHT_MOTORS:
             self.set_motor(motor_id, right)
 
-    def rotate_clockwise(self, speed=None):
-        # Clockwise: left side forward, right side reverse.
-        rotate_speed = self.rotate_speed if speed is None else speed
-        self.set_side_speeds(rotate_speed, -rotate_speed)
-        self.get_logger().info(f"CALIB MODE: rotating clockwise at {rotate_speed:.2f}")
+    def set_lateral_speed(self, lateral_speed):
+        # Positive speed moves right; negative speed moves left.
+        lateral_speed = max(-1.0, min(1.0, lateral_speed))
+        self.set_motor(1, -lateral_speed)  # Right Front
+        self.set_motor(2, lateral_speed)   # Right Back
+        self.set_motor(3, -lateral_speed)  # Left Back
+        self.set_motor(4, lateral_speed)   # Left Front
+
+    def run_calibration_lateral_motion(self, now):
+        if now - self.calibration_last_switch_time >= self.calibration_switch_interval_seconds:
+            self.calibration_direction *= -1
+            self.calibration_last_switch_time = now
+            direction_label = "RIGHT" if self.calibration_direction > 0 else "LEFT"
+            self.get_logger().info(f"CALIB MODE: switching lateral direction to {direction_label}")
+
+        self.set_lateral_speed(self.calibration_direction * self.calibration_lateral_speed)
 
     def apply_line_control(self, error):
         if error == 9999:
@@ -115,13 +129,17 @@ class TestMotorControlNode(Node):
             if not line:
                 return
 
-            # Calibration stream from Arduino: rotate in one direction while it arrives.
+            # Calibration stream from Arduino: alternate lateral right/left while it arrives.
             if line.startswith('#'):
-                self.calibration_active = True
-                self.post_calibration_pause_until = 0.0
-                self.post_calibration_pause_announced = False
+                if not self.calibration_active:
+                    self.calibration_active = True
+                    self.post_calibration_pause_until = 0.0
+                    self.post_calibration_pause_announced = False
+                    self.calibration_direction = 1
+                    self.calibration_last_switch_time = now
+                    self.get_logger().info("CALIB MODE: starting lateral alternating motion")
                 self.get_logger().info(f"CALIB: {line}")
-                self.rotate_clockwise(self.calibration_rotate_speed)
+                self.run_calibration_lateral_motion(now)
                 return
 
             if self.calibration_active:
