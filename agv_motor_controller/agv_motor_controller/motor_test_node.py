@@ -33,9 +33,25 @@ class MotorTestNode(Node):
             4: {'forward': 6, 'reverse': 7}
         }
 
-        self.get_logger().info("Starting motor test with 4 motors (all enables on pin 17)...")
+        # User-provided physical mapping:
+        # 1: Right Front, 2: Right Back, 3: Left Back, 4: Left Front
+        self.RF = 1
+        self.RB = 2
+        self.LB = 3
+        self.LF = 4
 
-        self.test_motor()
+        # Motion tuning (time-based).
+        self.STRAIGHT_SPEED = 0.65
+        self.ROTATE_SPEED = 0.60
+        self.LATERAL_SPEED = 0.60
+
+        # Approximate distance is achieved by duration at fixed speed.
+        self.STRAIGHT_TIME = 3.0
+        self.ROTATE_TIME = 2.0
+        self.LATERAL_TIME = 2.5
+
+        self.get_logger().info("Starting motion sequence: straight -> clockwise rotate -> right lateral")
+        self.run_sequence()
 
     def set_motor_speed(self, motor_id, forward_speed=0.0, reverse_speed=0.0):
         """
@@ -69,30 +85,64 @@ class MotorTestNode(Node):
         for motor_id in self.MOTOR_CHANNELS:
             self.stop_motor(motor_id)
 
-    def test_motor(self):
-        # Test all 4 motors
-        for motor_id in [1, 2, 3, 4]:
-            # Forward
-            self.get_logger().info(f"Motor {motor_id} Forward")
-            self.set_motor_speed(motor_id, forward_speed=0.8)
-            time.sleep(2)
+    def drive_motor(self, motor_id, signed_speed):
+        """Positive signed_speed is forward, negative is reverse."""
+        speed = max(-1.0, min(1.0, signed_speed))
+        if speed >= 0.0:
+            self.set_motor_speed(motor_id, forward_speed=speed, reverse_speed=0.0)
+        else:
+            self.set_motor_speed(motor_id, forward_speed=0.0, reverse_speed=abs(speed))
 
-            # Stop
-            self.get_logger().info(f"Motor {motor_id} Stop")
-            self.stop_motor(motor_id)
-            time.sleep(1)
+    def run_pattern(self, motor_speeds, duration, label):
+        """
+        Run a timed movement pattern.
+        motor_speeds keys are motor IDs, values are signed speed (-1.0 to 1.0).
+        """
+        self.get_logger().info(f"{label} for {duration:.1f}s")
+        for motor_id, speed in motor_speeds.items():
+            self.drive_motor(motor_id, speed)
+        time.sleep(duration)
+        self.stop_all_motors()
+        time.sleep(0.5)
 
-            # Reverse
-            self.get_logger().info(f"Motor {motor_id} Reverse")
-            self.set_motor_speed(motor_id, reverse_speed=0.8)
-            time.sleep(2)
+    def run_sequence(self):
+        # 1) Go straight forward.
+        self.run_pattern(
+            {
+                self.RF: self.STRAIGHT_SPEED,
+                self.RB: self.STRAIGHT_SPEED,
+                self.LB: self.STRAIGHT_SPEED,
+                self.LF: self.STRAIGHT_SPEED,
+            },
+            self.STRAIGHT_TIME,
+            "Straight forward"
+        )
 
-            # Stop
-            self.get_logger().info(f"Motor {motor_id} Final Stop")
-            self.stop_motor(motor_id)
-            time.sleep(1)
+        # 2) Rotate clockwise in place (right side reverse, left side forward).
+        self.run_pattern(
+            {
+                self.RF: -self.ROTATE_SPEED,
+                self.RB: -self.ROTATE_SPEED,
+                self.LB: self.ROTATE_SPEED,
+                self.LF: self.ROTATE_SPEED,
+            },
+            self.ROTATE_TIME,
+            "Clockwise rotation"
+        )
 
-        self.get_logger().info("All motors test completed.")
+        # 3) Lateral right for mecanum/omni layout.
+        self.run_pattern(
+            {
+                self.RF: -self.LATERAL_SPEED,
+                self.RB: self.LATERAL_SPEED,
+                self.LB: -self.LATERAL_SPEED,
+                self.LF: self.LATERAL_SPEED,
+            },
+            self.LATERAL_TIME,
+            "Lateral right"
+        )
+
+        self.get_logger().info("Motion sequence completed.")
         self.stop_all_motors()
 
         GPIO.cleanup()
