@@ -46,6 +46,12 @@ class TestMotorControlNode(Node):
             self.pca.channels[ch['forward']].duty_cycle = 0
             self.pca.channels[ch['reverse']].duty_cycle = int(abs(speed) * 65535)
 
+    def stop_all_motors(self):
+        for motor_id in self.MOTOR_CHANNELS:
+            ch = self.MOTOR_CHANNELS[motor_id]
+            self.pca.channels[ch['forward']].duty_cycle = 0
+            self.pca.channels[ch['reverse']].duty_cycle = 0
+
     def callback(self, msg):
         error = msg.data
 
@@ -72,7 +78,12 @@ class TestMotorControlNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = TestMotorControlNode()
-    rclpy.spin(node)
-    GPIO.cleanup()
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("KeyboardInterrupt received. Stopping all motors...")
+    finally:
+        node.stop_all_motors()
+        GPIO.cleanup()
+        node.destroy_node()
+        rclpy.shutdown()
