@@ -39,7 +39,7 @@ class TestMotorControlNode(Node):
         self.Kp = 0.8
         self.rotate_speed = 0.5
         self.calibration_rotate_speed = 1.0
-        self.post_calibration_stop_seconds = 2.0
+        self.post_calibration_stop_seconds = 10.0
         self.calibration_active = False
         self.post_calibration_pause_until = 0.0
         self.post_calibration_pause_announced = False
@@ -92,8 +92,8 @@ class TestMotorControlNode(Node):
             right = 0.0
         else:
             correction = self.Kp * error
-            left = self.base_speed + correction
-            right = self.base_speed - correction
+            left = self.base_speed - correction
+            right = self.base_speed + correction
 
         self.set_side_speeds(left, right)
         self.get_logger().info(f"CTRL: err={error:.2f} L:{left:.2f} R:{right:.2f}")
