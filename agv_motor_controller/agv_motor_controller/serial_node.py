@@ -35,8 +35,13 @@ class SerialNode(Node):
             # Read and decode safely
             line = self.ser.readline().decode('utf-8', errors='ignore').strip()
 
-            # Ignore empty or debug lines
-            if not line or line.startswith('#'):
+            # Ignore empty lines
+            if not line:
+                return
+
+            # Print calibration/debug lines from firmware.
+            if line.startswith('#'):
+                self.get_logger().info(f"CALIB: {line}")
                 return
 
             data = line.split(',')

@@ -29,7 +29,7 @@ class TestMotorControlNode(Node):
             4: {'forward': 6, 'reverse': 7}
         }
 
-        self.base_speed = 0.3
+        self.base_speed = 0.7
         self.Kp = 0.8
 
         self.create_subscription(Float32, '/line_error', self.callback, 10)
