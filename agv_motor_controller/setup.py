@@ -47,6 +47,9 @@ setup(
         'grid_path_planner_node = agv_motor_controller.grid_path_planner_node:main',
         'path_result_monitor = agv_motor_controller.path_result_monitor:main',
         'serial_node = agv_motor_controller.serial_node:main',
+        'line_follower_node = agv_motor_controller.line_follower_node:main',
+        'test_line_control_node = agv_motor_controller.test_line_control_node:main',
+        'test_motor_control_node = agv_motor_controller.test_motor_control_node:main',
     ],
 },
 )
