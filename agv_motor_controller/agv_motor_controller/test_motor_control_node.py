@@ -5,6 +5,7 @@ import busio
 import RPi.GPIO as GPIO
 from adafruit_pca9685 import PCA9685
 import serial
+import time
 
 class TestMotorControlNode(Node):
 
@@ -37,6 +38,11 @@ class TestMotorControlNode(Node):
         self.base_speed = 0.7
         self.Kp = 0.8
         self.rotate_speed = 0.5
+        self.calibration_rotate_speed = 1.0
+        self.post_calibration_stop_seconds = 2.0
+        self.calibration_active = False
+        self.post_calibration_pause_until = 0.0
+        self.post_calibration_pause_announced = False
 
         self.packet_count = 0
         self.last_error = 0.0
@@ -74,10 +80,11 @@ class TestMotorControlNode(Node):
         for motor_id in self.RIGHT_MOTORS:
             self.set_motor(motor_id, right)
 
-    def rotate_clockwise(self):
+    def rotate_clockwise(self, speed=None):
         # Clockwise: left side forward, right side reverse.
-        self.set_side_speeds(self.rotate_speed, -self.rotate_speed)
-        self.get_logger().info(f"CALIB MODE: rotating clockwise at {self.rotate_speed:.2f}")
+        rotate_speed = self.rotate_speed if speed is None else speed
+        self.set_side_speeds(rotate_speed, -rotate_speed)
+        self.get_logger().info(f"CALIB MODE: rotating clockwise at {rotate_speed:.2f}")
 
     def apply_line_control(self, error):
         if error == 9999:
@@ -85,8 +92,8 @@ class TestMotorControlNode(Node):
             right = 0.0
         else:
             correction = self.Kp * error
-            left = self.base_speed - correction
-            right = self.base_speed + correction
+            left = self.base_speed + correction
+            right = self.base_speed - correction
 
         self.set_side_speeds(left, right)
         self.get_logger().info(f"CTRL: err={error:.2f} L:{left:.2f} R:{right:.2f}")
@@ -103,15 +110,39 @@ class TestMotorControlNode(Node):
     def read_serial(self):
         try:
             line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+            now = time.monotonic()
 
             if not line:
                 return
 
             # Calibration stream from Arduino: rotate in one direction while it arrives.
             if line.startswith('#'):
+                self.calibration_active = True
+                self.post_calibration_pause_until = 0.0
+                self.post_calibration_pause_announced = False
                 self.get_logger().info(f"CALIB: {line}")
-                self.rotate_clockwise()
+                self.rotate_clockwise(self.calibration_rotate_speed)
                 return
+
+            if self.calibration_active:
+                self.calibration_active = False
+                self.stop_all_motors()
+                self.post_calibration_pause_until = now + self.post_calibration_stop_seconds
+                self.post_calibration_pause_announced = False
+
+            if self.post_calibration_pause_until > 0.0 and now < self.post_calibration_pause_until:
+                self.stop_all_motors()
+                if not self.post_calibration_pause_announced:
+                    self.get_logger().info(
+                        f"CALIB DONE: stopped for {self.post_calibration_stop_seconds:.1f}s before control resumes"
+                    )
+                    self.post_calibration_pause_announced = True
+                return
+
+            if self.post_calibration_pause_until > 0.0 and now >= self.post_calibration_pause_until:
+                self.post_calibration_pause_until = 0.0
+                self.post_calibration_pause_announced = False
+                self.get_logger().info("CALIB DONE: resuming line control")
 
             data = line.split(',')
             if len(data) < 5:
