@@ -94,8 +94,8 @@ class AGVMotorControlNode(Node):
 
         left_cmd = max(-1.0, min(1.0, left))
         right_cmd = max(-1.0, min(1.0, right))
-        left_pwm = int(abs(left_cmd) * 65535)
-        right_pwm = int(abs(right_cmd) * 65535)
+        left_pwm = int(abs(left_cmd) * 255)
+        right_pwm = int(abs(right_cmd) * 255)
         self.get_logger().info(
             f"line_error={error:.2f}, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
         )
@@ -105,25 +105,30 @@ class AGVMotorControlNode(Node):
     def read_serial(self):
         try:
             line = self.ser.readline().decode('utf-8', errors='ignore').strip()
-            if not line:
-                return
-
             now = time.monotonic()
 
-            # Start calibration when Arduino announces it.
-            if line.startswith('#CALIBRATING') and not self.calibration_active:
-                self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
-                self.calibration_active = True
-                self.calibration_start_time = now
-                self.stop_all_motors()
-                return
+            if line.startswith('#'):
+                if (
+                    line.startswith('#CALIBRATING')
+                    or line.startswith('#MIN:')
+                    or line.startswith('#MAX:')
+                    or line.startswith('#STREAM_START')
+                ):
+                    self.get_logger().info(f"arduino_msg: {line}")
 
-            # End calibration when Arduino starts streaming CSV.
-            if line.startswith('#STREAM_START') and self.calibration_active:
-                self.calibration_active = False
-                self.stop_all_motors()
-                self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
-                return
+                # Start calibration when Arduino announces it.
+                if line.startswith('#CALIBRATING') and not self.calibration_active:
+                    self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
+                    self.calibration_active = True
+                    self.calibration_start_time = now
+                    self.stop_all_motors()
+
+                # End calibration when Arduino starts streaming CSV.
+                if line.startswith('#STREAM_START') and self.calibration_active:
+                    self.calibration_active = False
+                    self.stop_all_motors()
+                    self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
+                    return
 
             # === Perform Lateral Movement during calibration ===
             if self.calibration_active:
@@ -136,6 +141,9 @@ class AGVMotorControlNode(Node):
                 return
 
             # === Normal Line Following Mode ===
+            if not line:
+                return
+
             if line.startswith('#'):
                 return
 
