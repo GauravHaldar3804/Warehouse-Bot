@@ -33,9 +33,13 @@ class AGVMotorControlNode(Node):
         self.Kp = 1.8
         self.Ki = 0.02
         self.Kd = 0.8
+        self.white_threshold = 80
+        self.search_speed = 0.45
+        self.search_inner_speed = 0.08
 
         self.last_error = 0.0
         self.integral = 0.0
+        self.last_seen_error_sign = 1
 
         # Serial
         self.ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=0.1)
@@ -71,10 +75,30 @@ class AGVMotorControlNode(Node):
         self.set_motor(3, -speed)   # LB
         self.set_motor(4,  speed)   # LF
 
-    def apply_line_control(self, error):
-        if error == 9999.0 or abs(error) > 10:
-            self.stop_all_motors()
-            self.get_logger().info("line_error=9999.00, left_pwm=0, right_pwm=0, left_cmd=0.000, right_cmd=0.000")
+    def apply_line_control(self, error, sensor_norm):
+        line_lost = error == 9999.0 or abs(error) > 10
+        if not line_lost:
+            line_lost = all(v <= self.white_threshold for v in sensor_norm)
+
+        if line_lost:
+            # Recover toward the side where the line was last seen.
+            if self.last_seen_error_sign < 0:
+                left_cmd = self.search_inner_speed
+                right_cmd = self.search_speed
+            else:
+                left_cmd = self.search_speed
+                right_cmd = self.search_inner_speed
+
+            for m in [3, 4]:
+                self.set_motor(m, left_cmd)
+            for m in [1, 2]:
+                self.set_motor(m, right_cmd)
+
+            left_pwm = int(left_cmd * 255)
+            right_pwm = int(right_cmd * 255)
+            self.get_logger().info(
+                f"line_error=9999.00, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
+            )
             return
 
         self.integral += error * 0.02
@@ -83,8 +107,12 @@ class AGVMotorControlNode(Node):
         derivative = error - self.last_error
         correction = (self.Kp * error) + (self.Ki * self.integral) + (self.Kd * derivative)
 
-        left  = self.base_speed - correction
+        left = self.base_speed - correction
         right = self.base_speed + correction
+
+        # Line following is forward-only: never command reverse here.
+        left = max(0.0, min(1.0, left))
+        right = max(0.0, min(1.0, right))
 
         # Set side speeds
         for m in [3, 4]:   # Left motors
@@ -92,13 +120,16 @@ class AGVMotorControlNode(Node):
         for m in [1, 2]:   # Right motors
             self.set_motor(m, right)
 
-        left_cmd = max(-1.0, min(1.0, left))
-        right_cmd = max(-1.0, min(1.0, right))
+        left_cmd = left
+        right_cmd = right
         left_pwm = int(abs(left_cmd) * 255)
         right_pwm = int(abs(right_cmd) * 255)
         self.get_logger().info(
             f"line_error={error:.2f}, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
         )
+
+        if abs(error) > 0.02:
+            self.last_seen_error_sign = -1 if error < 0 else 1
 
         self.last_error = error
 
@@ -155,9 +186,9 @@ class AGVMotorControlNode(Node):
 
             error = float(data[0].strip())
             _encoders = [int(data[i].strip()) for i in range(1, 5)]
-            _sensor_norm = [int(data[i].strip()) for i in range(5, 13)]
+            sensor_norm = [int(data[i].strip()) for i in range(5, 13)]
 
-            self.apply_line_control(error)
+            self.apply_line_control(error, sensor_norm)
 
         except Exception:
             pass
