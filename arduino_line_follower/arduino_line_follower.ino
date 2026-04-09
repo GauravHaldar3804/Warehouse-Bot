@@ -13,12 +13,12 @@ float integral = 0;
 
 // ================= LINE LOST RECOVERY =================
 int lastErrorSign = 1;              // +1 or -1 based on last valid error
-const float lineDetectThreshold = 0.35;
-const int searchFastSpeed = 150;
-const int searchSlowSpeed = 40;
+const int lineLostNormThreshold = 600;
+const int searchFastSpeed = 255;
+const int searchSlowSpeed = -255;
 
 // ================= SPEED =================
-int baseSpeed = 130;
+int baseSpeed = 155;
 
 // ================= RUN CONTROL =================
 bool isRunning = true;
@@ -181,15 +181,21 @@ float readNormalized(int ch) {
 bool getLineError(float &errorOut) {
   float numerator = 0;
   float denominator = 0;
+  bool allBelowThreshold = true;
 
   for (int i = 0; i < 8; i++) {
     float val = 1 - readNormalized(i);
+    int norm1000 = (int)(val * 1000.0);
+    if (norm1000 >= lineLostNormThreshold) {
+      allBelowThreshold = false;
+    }
 
     numerator += val * weights[i];
     denominator += val;
   }
 
-  if (denominator < lineDetectThreshold) return false;
+  if (allBelowThreshold) return false;
+  if (denominator <= 0.0001) return false;
 
   errorOut = numerator / denominator;
   return true;
