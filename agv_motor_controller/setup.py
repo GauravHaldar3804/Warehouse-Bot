@@ -13,6 +13,7 @@ setup(
     ],
     install_requires=[
         'setuptools',
+        'pyserial',
         'adafruit-circuitpython-mpu6050',
         'adafruit-circuitpython-busdevice',
         'adafruit-circuitpython-register',
@@ -50,6 +51,7 @@ setup(
         'line_follower_node = agv_motor_controller.line_follower_node:main',
         'test_line_control_node = agv_motor_controller.test_line_control_node:main',
         'test_motor_control_node = agv_motor_controller.test_motor_control_node:main',
+        'binary_realtime_motor_control_node = agv_motor_controller.binary_realtime_motor_control_node:main',
     ],
 },
 )

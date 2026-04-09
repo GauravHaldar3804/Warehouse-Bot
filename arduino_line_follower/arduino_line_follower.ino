@@ -4,12 +4,18 @@
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 // ================= PID =================
-float Kp = 25;
+float Kp = 30;
 float Ki = 0;
 float Kd = 15;
 
 float prevError = 0;
 float integral = 0;
+
+// ================= LINE LOST RECOVERY =================
+int lastErrorSign = 1;              // +1 or -1 based on last valid error
+const float lineDetectThreshold = 0.35;
+const int searchFastSpeed = 150;
+const int searchSlowSpeed = 40;
 
 // ================= SPEED =================
 int baseSpeed = 130;
@@ -172,7 +178,7 @@ float readNormalized(int ch) {
 }
 
 // ================= LINE ERROR =================
-float getLineError() {
+bool getLineError(float &errorOut) {
   float numerator = 0;
   float denominator = 0;
 
@@ -183,9 +189,10 @@ float getLineError() {
     denominator += val;
   }
 
-  if (denominator == 0) return 0;
+  if (denominator < lineDetectThreshold) return false;
 
-  return numerator / denominator;
+  errorOut = numerator / denominator;
+  return true;
 }
 
 // ================= PID =================
@@ -210,14 +217,40 @@ void loop() {
     return;
   }
 
-  float error = getLineError();
-  int correction = computePID(error);
+  float error = 0;
+  int leftSpeed = 0;
+  int rightSpeed = 0;
 
-  int leftSpeed  = baseSpeed + correction;
-  int rightSpeed = baseSpeed - correction;
+  bool lineDetected = getLineError(error);
 
-  leftSpeed  = constrain(leftSpeed, -255, 255);
-  rightSpeed = constrain(rightSpeed, -255, 255);
+  if (lineDetected) {
+    int correction = computePID(error);
+
+    leftSpeed  = baseSpeed + correction;
+    rightSpeed = baseSpeed - correction;
+
+    leftSpeed  = constrain(leftSpeed, -255, 255);
+    rightSpeed = constrain(rightSpeed, -255, 255);
+
+    if (error > 0.05) {
+      lastErrorSign = 1;
+    } else if (error < -0.05) {
+      lastErrorSign = -1;
+    }
+  } else {
+    // Prevent PID windup while searching for line again.
+    integral = 0;
+    prevError = 0;
+
+    // Turn toward the side where the line was last seen.
+    if (lastErrorSign > 0) {
+      leftSpeed = searchFastSpeed;
+      rightSpeed = searchSlowSpeed;
+    } else {
+      leftSpeed = searchSlowSpeed;
+      rightSpeed = searchFastSpeed;
+    }
+  }
 
   // LEFT SIDE
   setMotor(6,7,leftSpeed);
@@ -227,8 +260,12 @@ void loop() {
   setMotor(0,1,rightSpeed);
   setMotor(2,3,rightSpeed);
 
-  Serial.print("Error: ");
-  Serial.println(error);
+  if (lineDetected) {
+    Serial.print("Error: ");
+    Serial.println(error);
+  } else {
+    Serial.println("LINE LOST -> SEARCHING");
+  }
 
   delay(10);
 }
