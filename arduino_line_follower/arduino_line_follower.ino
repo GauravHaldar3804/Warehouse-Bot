@@ -243,7 +243,7 @@ void loop() {
     prevError = 0;
 
     // Turn toward the side where the line was last seen.
-    if (lastErrorSign > 0) {
+    if (lastErrorSign < 0) {
       leftSpeed = searchFastSpeed;
       rightSpeed = searchSlowSpeed;
     } else {
