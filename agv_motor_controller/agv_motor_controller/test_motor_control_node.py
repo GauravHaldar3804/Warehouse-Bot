@@ -43,6 +43,8 @@ class AGVMotorControlNode(Node):
         self.calibration_active = False
         self.calibration_start_time = 0.0
         self.calibration_duration = 10.0
+        self.calibration_segment_seconds = 2.0
+        self.calibration_lateral_speed = 0.8
 
         self.get_logger().info("AGV Node Started - Waiting for Arduino calibration...")
 
@@ -102,6 +104,9 @@ class AGVMotorControlNode(Node):
 
             now = time.monotonic()
 
+            if line.startswith('#'):
+                self.get_logger().info(f"arduino_msg: {line}")
+
             # === Start Calibration when Arduino sends this message ===
             if "#CALIBRATING 10 SECONDS" in line:
                 self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
@@ -119,20 +124,27 @@ class AGVMotorControlNode(Node):
                     self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
                     return
 
-                # Move left and right every 2 seconds
-                direction = 1 if int(elapsed / 2) % 2 == 0 else -1
-                self.set_lateral_speed(direction * 0.8)   # 80% speed lateral movement
+                # Alternate: 2s left, 2s right, repeated until calibration ends.
+                segment_index = int(elapsed // self.calibration_segment_seconds)
+                direction = -1 if segment_index % 2 == 0 else 1
+                self.set_lateral_speed(direction * self.calibration_lateral_speed)
                 return
 
             # === Normal Line Following Mode ===
             if line.startswith('#'):
-                return  # Ignore other debug messages
+                return
 
             data = line.split(',')
             if len(data) < 5:
                 return
 
             error = float(data[0])
+            sensors = [float(v.strip()) for v in data[1:5]]
+
+            self.get_logger().info(
+                f"line_sensors={sensors[0]:.2f},{sensors[1]:.2f},{sensors[2]:.2f},{sensors[3]:.2f}"
+            )
+
             self.apply_line_control(error)
 
         except Exception:
