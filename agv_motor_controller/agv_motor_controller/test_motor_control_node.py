@@ -45,6 +45,7 @@ class AGVMotorControlNode(Node):
         self.calibration_duration = 10.0
         self.calibration_segment_seconds = 2.0
         self.calibration_lateral_speed = 0.8
+        self.calibration_last_segment_index = -1
 
         self.get_logger().info("AGV Node Started - Waiting for Arduino calibration...")
 
@@ -94,6 +95,14 @@ class AGVMotorControlNode(Node):
         for m in [1, 2]:   # Right motors
             self.set_motor(m, right)
 
+        left_cmd = max(-1.0, min(1.0, left))
+        right_cmd = max(-1.0, min(1.0, right))
+        left_pwm = int(abs(left_cmd) * 65535)
+        right_pwm = int(abs(right_cmd) * 65535)
+        self.get_logger().info(
+            f"line_error={error:.2f}, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
+        )
+
         self.last_error = error
 
     def read_serial(self):
@@ -108,10 +117,11 @@ class AGVMotorControlNode(Node):
                 self.get_logger().info(f"arduino_msg: {line}")
 
             # === Start Calibration when Arduino sends this message ===
-            if "#CALIBRATING 10 SECONDS" in line:
+            if "#CALIBRATING 10 SECONDS" in line and not self.calibration_active:
                 self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
                 self.calibration_active = True
                 self.calibration_start_time = now
+                self.calibration_last_segment_index = -1
                 self.stop_all_motors()
 
             # === Perform Lateral Movement during calibration ===
@@ -127,6 +137,12 @@ class AGVMotorControlNode(Node):
                 # Alternate: 2s left, 2s right, repeated until calibration ends.
                 segment_index = int(elapsed // self.calibration_segment_seconds)
                 direction = -1 if segment_index % 2 == 0 else 1
+
+                if segment_index != self.calibration_last_segment_index:
+                    side = "LEFT" if direction < 0 else "RIGHT"
+                    self.get_logger().info(f"calibration_motion: {side} (segment={segment_index}, elapsed={elapsed:.2f}s)")
+                    self.calibration_last_segment_index = segment_index
+
                 self.set_lateral_speed(direction * self.calibration_lateral_speed)
                 return
 
