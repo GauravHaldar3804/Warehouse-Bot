@@ -97,9 +97,9 @@ class AGVMotorControlNode(Node):
 
             left_pwm = int(left_cmd * 255)
             right_pwm = int(right_cmd * 255)
-            self.get_logger().info(
-                f"line_error=9999.00, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
-            )
+            # self.get_logger().info(
+            #     f"line_error=9999.00, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
+            # )
             return
 
         self.integral += error * 0.02
@@ -125,9 +125,9 @@ class AGVMotorControlNode(Node):
         right_cmd = right
         left_pwm = int(abs(left_cmd) * 255)
         right_pwm = int(abs(right_cmd) * 255)
-        self.get_logger().info(
-            f"line_error={error:.2f}, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
-        )
+        # self.get_logger().info(
+        #     f"line_error={error:.2f}, left_pwm={left_pwm}, right_pwm={right_pwm}, left_cmd={left_cmd:.3f}, right_cmd={right_cmd:.3f}"
+        # )
 
         if abs(error) > 0.02:
             self.last_seen_error_sign = -1 if error < 0 else 1
@@ -146,11 +146,12 @@ class AGVMotorControlNode(Node):
                     or line.startswith('#MAX:')
                     or line.startswith('#STREAM_START')
                 ):
-                    self.get_logger().info(f"arduino_msg: {line}")
+                    # self.get_logger().info(f"arduino_msg: {line}")
+                    pass
 
                 # Start calibration when Arduino announces it.
                 if line.startswith('#CALIBRATING') and not self.calibration_active:
-                    self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
+                    # self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
                     self.calibration_active = True
                     self.stream_ready = False
                     self.calibration_start_time = now
@@ -161,7 +162,7 @@ class AGVMotorControlNode(Node):
                     self.calibration_active = False
                     self.stream_ready = True
                     self.stop_all_motors()
-                    self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
+                    # self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
                     return
 
             # === Perform Lateral Movement during calibration ===
@@ -195,6 +196,10 @@ class AGVMotorControlNode(Node):
             error = float(data[0].strip())
             _encoders = [int(data[i].strip()) for i in range(1, 5)]
             sensor_norm = [int(data[i].strip()) for i in range(5, 13)]
+
+            self.get_logger().info(
+                "sensor_norm=" + ",".join(str(v) for v in sensor_norm)
+            )
 
             self.apply_line_control(error, sensor_norm)
 
