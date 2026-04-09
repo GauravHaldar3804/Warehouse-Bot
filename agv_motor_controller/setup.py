@@ -20,6 +20,7 @@ setup(
         'adafruit-circuitpython-vl53l0x',
         'adafruit-circuitpython-ads1x15',
         'adafruit-circuitpython-pca9685',
+        'adafruit-circuitpython-ina219',
         'opencv-python',
         'pyzbar',
     ],
@@ -52,6 +53,8 @@ setup(
         'test_line_control_node = agv_motor_controller.test_line_control_node:main',
         'test_motor_control_node = agv_motor_controller.test_motor_control_node:main',
         'binary_realtime_motor_control_node = agv_motor_controller.binary_realtime_motor_control_node:main',
+        'motor_command_serial_bridge = agv_motor_controller.motor_command_serial_bridge:main',
+        'ina219_battery_node = agv_motor_controller.ina219_battery_node:main',
     ],
 },
 )

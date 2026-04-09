@@ -66,6 +66,7 @@ class CameraNode(Node):
         self.pending_command_source_heading = None
         self.last_motor_command = 'NONE'
         self.command_sent_this_frame = False
+        self.last_path_signature = ''
 
         self.bridge = CvBridge()
 
@@ -75,6 +76,9 @@ class CameraNode(Node):
         self.qr_detector = cv2.QRCodeDetector()
 
         self.setup_socket()
+
+        self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
+        self.handshake_thread.start()
 
         self.running = True
         self.thread = Thread(target=self.receive_frames, daemon=True)
@@ -90,13 +94,32 @@ class CameraNode(Node):
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
         self.sock.bind((self.udp_ip, self.udp_port))
         self.sock.settimeout(2)
+    def send_handshake(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+        self.get_logger().info("📡 Sending HELLO broadcast...")
+
+        while rclpy.ok():
+            try:
+                sock.sendto(b"HELLO", ('255.255.255.255', 1234))
+                time.sleep(1)
+            except Exception as e:
+                self.get_logger().error(f"Handshake error: {e}")
+                
     def path_result_callback(self, msg: String):
         try:
             result = json.loads(msg.data)
             if result.get('status') == 'success':
-                self.path_nodes = result.get('path', [])
-                self.navigation_actions = [item.get('action', '').upper() for item in result.get('navigation', [])]
+                new_path_nodes = result.get('path', [])
+                new_navigation_actions = [item.get('action', '').upper() for item in result.get('navigation', [])]
+                new_signature = '|'.join(new_path_nodes) + '||' + '|'.join(new_navigation_actions)
+
+                is_new_path = new_signature != self.last_path_signature
+                self.last_path_signature = new_signature
+
+                self.path_nodes = new_path_nodes
+                self.navigation_actions = new_navigation_actions
                 self.current_node_index = 0
                 self.visited_nodes = []
                 if len(self.path_nodes) > 1:
@@ -110,6 +133,12 @@ class CameraNode(Node):
                 self.get_logger().info(f"Total nodes: {len(self.path_nodes)}")
                 if self.navigation_actions:
                     self.get_logger().info(f"Planner actions: {' | '.join(self.navigation_actions)}")
+
+                # Trigger motion only for a newly received mission path.
+                if is_new_path:
+                    self.publish_motor_command("START")
+                else:
+                    self.get_logger().info("Path unchanged, not re-sending START")
         except Exception as e:
             self.get_logger().error(f"Path parse error: {e}")
 
@@ -119,7 +148,10 @@ class CameraNode(Node):
         while self.running:
             try:
                 while True:
-                    data, _ = self.sock.recvfrom(4096)
+                    data, addr = self.sock.recvfrom(4096)
+                    if data == b"ACK":
+                        self.get_logger().info(f"🤝 ESP32 ready at {addr}")
+                        continue
                     if len(data) == 4 and struct.unpack("I", data)[0] == MARKER:
                         break
 
@@ -152,33 +184,35 @@ class CameraNode(Node):
         if m:
             col = ord(m.group(1)) - ord('A')
             row = int(m.group(2))
-            return float(col), float(4 - row)
+            return float(col), float(3 - row)
 
         m = re.match(r'^([A-D])([A-D])(\d)$', node_label)
         if m:
             c1 = ord(m.group(1)) - ord('A')
             c2 = ord(m.group(2)) - ord('A')
             row = int(m.group(3))
-            return (c1 + c2) / 2.0, float(4 - row)
+            return (c1 + c2) / 2.0, float(3 - row)
 
         m = re.match(r'^([A-D])(\d)(\d)$', node_label)
         if m:
             col = ord(m.group(1)) - ord('A')
             r1 = int(m.group(2))
             r2 = int(m.group(3))
-            return float(col), (4 - (r1 + r2) / 2.0)
+            return float(col), (3 - (r1 + r2) / 2.0)
 
         m = re.match(r'^DOC-([A-D])([A-D])(\d)$', node_label)
         if m:
             c1 = ord(m.group(1)) - ord('A')
             c2 = ord(m.group(2)) - ord('A')
             row = int(m.group(3))
-            return (c1 + c2) / 2.0, float(4 - row) + 0.5
+            return (c1 + c2) / 2.0, float(3 - row) + 0.5
 
         m = re.match(r'^HOME-(\d)$', node_label)
         if m:
-            row = int(m.group(1))
-            return 3.5, float(4 - row)
+            home_index = int(m.group(1))
+            if 1 <= home_index <= 4:
+                return float(home_index - 1), -0.5
+            return None
 
         return None
 
@@ -255,6 +289,7 @@ class CameraNode(Node):
         self.motor_command_publisher.publish(msg)
         self.last_motor_command = direction
         self.command_sent_this_frame = True
+        print(f"MOTOR_COMMAND_SENT: {direction}", flush=True)
         self.get_logger().info(f"🎯 MOTOR COMMAND: {direction}")
 
     # =========================

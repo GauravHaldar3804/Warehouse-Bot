@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32
+from std_msgs.msg import String
 
 import board
 import busio
@@ -22,6 +23,18 @@ class DualVL53L0X(Node):
         self.pub1 = self.create_publisher(Float32, '/tof1/distance', 10)
         self.pub2 = self.create_publisher(Float32, '/tof2/distance', 10)
         self.pub3 = self.create_publisher(Float32, '/tof3/distance', 10)
+        self.motor_command_pub = self.create_publisher(String, 'motor_command', 10)
+        self.motor_command_sub = self.create_subscription(String, 'motor_command', self.motor_command_callback, 10)
+
+        # Obstacle gating: 40 cm threshold, 2 sec persistence
+        self.obstacle_threshold_mm = 400.0
+        self.persistence_seconds = 2.0
+        self.obstacle_active = False
+        self.obstacle_below_since = None
+        self.clear_since = None
+        self.running_assumed = False
+        self.resume_needed = False
+        self._ignore_next_command = None
 
         # Setup GPIO
         GPIO.setmode(GPIO.BCM)
@@ -64,6 +77,28 @@ class DualVL53L0X(Node):
         # Timer (10 Hz)
         self.timer = self.create_timer(0.1, self.read_sensors)
 
+    def publish_motor_command(self, command: str):
+        self._ignore_next_command = command
+        msg = String()
+        msg.data = command
+        self.motor_command_pub.publish(msg)
+        self.get_logger().info(f"TOF safety command: {command}")
+
+    def motor_command_callback(self, msg: String):
+        command = msg.data.strip().upper()
+        if not command:
+            return
+
+        # Ignore loopback from this same node's publish call.
+        if self._ignore_next_command == command:
+            self._ignore_next_command = None
+            return
+
+        if command == 'START':
+            self.running_assumed = True
+        elif command == 'STOP':
+            self.running_assumed = False
+
     def read_sensors(self):
         msg1 = Float32()
         msg2 = Float32()
@@ -93,6 +128,39 @@ class DualVL53L0X(Node):
         self.pub1.publish(msg1)
         self.pub2.publish(msg2)
         self.pub3.publish(msg3)
+
+        now = time.monotonic()
+        distances = [dist1, dist2, dist3]
+        valid_distances = [d for d in distances if d >= 0]
+
+        any_below = any(d <= self.obstacle_threshold_mm for d in valid_distances)
+        all_clear = len(valid_distances) == 3 and all(d > self.obstacle_threshold_mm for d in valid_distances)
+
+        if not self.obstacle_active:
+            if any_below:
+                if self.obstacle_below_since is None:
+                    self.obstacle_below_since = now
+                elif (now - self.obstacle_below_since) >= self.persistence_seconds:
+                    self.publish_motor_command('STOP')
+                    self.resume_needed = self.running_assumed
+                    self.running_assumed = False
+                    self.obstacle_active = True
+                    self.clear_since = None
+            else:
+                self.obstacle_below_since = None
+        else:
+            if all_clear:
+                if self.clear_since is None:
+                    self.clear_since = now
+                elif (now - self.clear_since) >= self.persistence_seconds:
+                    if self.resume_needed:
+                        self.publish_motor_command('START')
+                        self.running_assumed = True
+                    self.obstacle_active = False
+                    self.resume_needed = False
+                    self.obstacle_below_since = None
+            else:
+                self.clear_since = None
         
         # Print values to terminal
         # print(f"TOF Distance [mm]  |  Sensor 1: {dist1:6.1f}  |  Sensor 2: {dist2:6.1f}", flush=True)

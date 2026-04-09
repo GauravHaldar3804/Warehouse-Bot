@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from collections import deque
 import heapq
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Optional, Tuple, Set
 import numpy as np
 
 class GridNode:
@@ -33,71 +33,79 @@ class GridNode:
 
 
 class GridPathPlanner:
-    """Path planning system for 4x4 grid"""
+    """Path planning system for configurable rectangular grids"""
     
-    def __init__(self, grid_size: int = 4):
+    def __init__(self, grid_size: Optional[int] = None, num_cols: int = 4, num_rows: int = 3):
         """
         Initialize the grid path planner
         
         Args:
-            grid_size (int): Size of the grid (default 4x4)
+            grid_size (int): Optional legacy square size (sets cols=rows=grid_size)
+            num_cols (int): Number of grid columns (default 4 => A-D)
+            num_rows (int): Number of grid rows (default 3 => 1-3)
         """
-        self.grid_size = grid_size
+        if grid_size is not None:
+            num_cols = grid_size
+            num_rows = grid_size
+
+        self.num_cols = num_cols
+        self.num_rows = num_rows
         self.nodes: Dict[str, GridNode] = {}
         self.obstacles: Set[str] = set()
         self._create_grid()
     
     def _create_grid(self):
         """Create grid nodes including intermediate nodes and dock nodes"""
-        cols = [chr(65 + i) for i in range(self.grid_size)]  # A, B, C, D
-        rows = [str(i + 1) for i in range(self.grid_size)]   # 1, 2, 3, 4
+        cols = [chr(65 + i) for i in range(self.num_cols)]
+        rows = [str(i + 1) for i in range(self.num_rows)]
         
         # Create main grid nodes (intersections)
         for i, col in enumerate(cols):
             for j, row in enumerate(rows):
                 label = f"{col}{row}"
                 x = i
-                y = (self.grid_size - 1 - j)
+                y = (self.num_rows - 1 - j)
                 self.nodes[label] = GridNode(label, x, y, col, row)
         
         # Create intermediate nodes on vertical lines (between rows)
         for i, col in enumerate(cols):
-            for j in range(self.grid_size - 1):
+            for j in range(self.num_rows - 1):
                 row1 = str(j + 1)
                 row2 = str(j + 2)
                 label = f"{col}{row1}{row2}"
                 x = i
-                y = (self.grid_size - 1 - j) - 0.5
+                y = (self.num_rows - 1 - j) - 0.5
                 self.nodes[label] = GridNode(label, x, y, col, f"{row1}-{row2}")
         
         # Create intermediate nodes on horizontal lines (between columns)
         horizontal_intermediate_nodes = []
-        for i in range(self.grid_size - 1):
+        for i in range(self.num_cols - 1):
             col1 = chr(65 + i)
             col2 = chr(65 + i + 1)
             for j, row in enumerate(rows):
                 label = f"{col1}{col2}{row}"
                 x = i + 0.5
-                y = (self.grid_size - 1 - j)
+                y = (self.num_rows - 1 - j)
                 self.nodes[label] = GridNode(label, x, y, f"{col1}-{col2}", row)
                 horizontal_intermediate_nodes.append((label, x, y))
         
         # Create dock nodes extending upward from horizontal intermediate nodes (except row 1)
         for horiz_label, horiz_x, horiz_y in horizontal_intermediate_nodes:
-            # Skip creating dock nodes for row 1 (y = 3)
-            if horiz_y == 3:
+            # Skip creating dock nodes for row 1 (top row)
+            if horiz_y == (self.num_rows - 1):
                 continue
             doc_label = f"DOC-{horiz_label}"
             doc_x = horiz_x
             doc_y = horiz_y + 0.5  # Extend 0.5 units upward
             self.nodes[doc_label] = GridNode(doc_label, doc_x, doc_y, f"dock-{horiz_label}", f"doc")
         
-        # Create home nodes extending to the right from cd horizontal intermediate nodes
-        for j, row in enumerate(rows):
-            home_label = f"HOME-{row}"
-            home_x = (self.grid_size - 1) + 0.5  # Extend 0.5 units to the right of column d
-            home_y = (self.grid_size - 1 - j)
-            self.nodes[home_label] = GridNode(home_label, home_x, home_y, "home", row)
+        # Create home nodes below each column: HOME-1..HOME-N
+        # HOME-1 under column A, HOME-2 under B, etc.
+        for i, col in enumerate(cols):
+            home_label = f"HOME-{i + 1}"
+            home_x = i
+            home_y = -0.5
+            self.nodes[home_label] = GridNode(home_label, home_x, home_y, "home", col)
     
     def add_obstacle(self, node_label: str):
         """Mark a node as obstacle"""
@@ -378,16 +386,17 @@ class GridPathPlanner:
         """
         fig, ax = plt.subplots(1, 1, figsize=(14, 14))
         
-        cols = [chr(65 + i) for i in range(self.grid_size)]  # A, B, C, D
-        rows = [str(i + 1) for i in range(self.grid_size)]   # 1, 2, 3, 4
+        cols = [chr(65 + i) for i in range(self.num_cols)]
+        rows = [str(i + 1) for i in range(self.num_rows)]
         cell_size = 1
         
         # Draw grid lines (black)
-        for i in range(self.grid_size + 1):
+        for i in range(self.num_cols + 1):
             ax.plot([i * cell_size, i * cell_size], 
-                   [0, self.grid_size * cell_size], 
+                   [0, (self.num_rows - 1) * cell_size], 
                    'k-', linewidth=2)
-            ax.plot([0, self.grid_size * cell_size], 
+        for i in range(self.num_rows):
+            ax.plot([0, self.num_cols * cell_size], 
                    [i * cell_size, i * cell_size], 
                    'k-', linewidth=2)
         
@@ -409,28 +418,24 @@ class GridPathPlanner:
                 ax.text(node.x, node.y, node.label, 
                        fontsize=6, ha='center', va='center', fontweight='bold', alpha=0.7)
         
-        # Draw edges from horizontal intermediate nodes to their dock nodes (black lines)
+        # Draw edges from horizontal intermediate nodes to their dock nodes.
         for node in self.nodes.values():
             if node.label.startswith('DOC-'):
-                # Extract the parent node label
                 parent_label = node.label.replace('DOC-', '')
                 if parent_label in self.nodes:
                     parent_node = self.nodes[parent_label]
-                    # Draw edge line between them (black, dashed)
-                    ax.plot([parent_node.x, node.x], [parent_node.y, node.y], 
+                    ax.plot([parent_node.x, node.x], [parent_node.y, node.y],
                            'k--', linewidth=1.5, alpha=0.5, zorder=1)
         
-        # Draw edges from D nodes to home nodes (black lines)
-        for node in self.nodes.values():
-            if node.label.startswith('HOME-'):
-                # Find the corresponding CD horizontal intermediate node
-                row = node.label.replace('HOME-', '')
-                cd_label = f"CD{row}"
-                if cd_label in self.nodes:
-                    cd_node = self.nodes[cd_label]
-                    # Draw edge line between them (black, dashed)
-                    ax.plot([cd_node.x, node.x], [cd_node.y, node.y], 
-                           'k--', linewidth=1.5, alpha=0.5, zorder=1)
+        # Draw edges from bottom-row main nodes to home nodes below each column.
+        for i in range(self.num_cols):
+            home_label = f"HOME-{i + 1}"
+            base_label = f"{chr(65 + i)}{self.num_rows}"
+            if home_label in self.nodes and base_label in self.nodes:
+                home_node = self.nodes[home_label]
+                base_node = self.nodes[base_label]
+                ax.plot([base_node.x, home_node.x], [base_node.y, home_node.y], 
+                       'k--', linewidth=1.5, alpha=0.5, zorder=1)
         
         # Draw path (blue, thick)
         if path and len(path) > 1:
@@ -462,12 +467,12 @@ class GridPathPlanner:
                    ha='center', va='top')
         
         for j, row in enumerate(rows):
-            y = (self.grid_size - 1 - j) * cell_size
+            y = (self.num_rows - 1 - j) * cell_size
             ax.text(-0.45, y, row, fontsize=12, fontweight='bold',
                    ha='right', va='center')
         
-        ax.set_xlim(-0.8, self.grid_size + 1)
-        ax.set_ylim(-0.8, self.grid_size + 0.5)
+        ax.set_xlim(-0.8, self.num_cols - 0.2)
+        ax.set_ylim(-0.8, self.num_rows - 0.2)
         ax.set_aspect('equal')
         ax.axis('off')
         
@@ -498,19 +503,19 @@ def demo_path_planning():
     """Demonstrate path planning with Dijkstra algorithm including dock nodes"""
     
     # Create planner
-    planner = GridPathPlanner(grid_size=4)
+    planner = GridPathPlanner(num_cols=4, num_rows=3)
     
     # Print grid structure
     print("\n" + "=" * 60)
-    print("GRID STRUCTURE - 4x4 with Enhanced Nodes")
+    print(f"GRID STRUCTURE - {planner.num_cols}x{planner.num_rows} with Enhanced Nodes")
     print("=" * 60)
     print(f"Total nodes created: {len(planner.nodes)}")
     print("\nNode Types:")
-    print("  • Main Intersection Nodes (16): A1, A2, A3, A4, B1, B2, B3, B4, C1, C2, C3, C4, D1, D2, D3, D4")
-    print("  • Vertical Intermediate Nodes (12): A12, A23, A34, B12, B23, B34, C12, C23, C34, D12, D23, D34")
-    print("  • Horizontal Intermediate Nodes (12): AB1, AB2, AB3, AB4, BC1, BC2, BC3, BC4, CD1, CD2, CD3, CD4")
-    print("  • Dock Nodes (9): DOC-AB2, DOC-AB3, DOC-AB4, DOC-BC2, DOC-BC3, DOC-BC4, DOC-CD2, DOC-CD3, DOC-CD4")
-    print("  • Home Nodes (4): HOME-1, HOME-2, HOME-3, HOME-4")
+    print(f"  • Main Intersection Nodes ({planner.num_cols * planner.num_rows})")
+    print(f"  • Vertical Intermediate Nodes ({planner.num_cols * max(planner.num_rows - 1, 0)})")
+    print(f"  • Horizontal Intermediate Nodes ({max(planner.num_cols - 1, 0) * planner.num_rows})")
+    print(f"  • Dock Nodes ({max(planner.num_cols - 1, 0) * max(planner.num_rows - 1, 0)})")
+    print(f"  • Home Nodes ({planner.num_cols})")
     
     print("\nAvailable Nodes:")
     print("  ", sorted([node for node in planner.nodes.keys()]))
