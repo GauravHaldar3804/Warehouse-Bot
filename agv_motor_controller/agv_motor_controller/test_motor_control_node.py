@@ -29,11 +29,11 @@ class AGVMotorControlNode(Node):
             4: {'forward': 6, 'reverse': 7}   # LF
         }
 
-        self.base_speed = 0.65
-        self.Kp = 1.8
+        self.base_speed = 0.5
+        self.Kp = 2
         self.Ki = 0.02
         self.Kd = 0.8
-        self.white_threshold = 80
+        self.white_threshold = 700
         self.search_speed = 0.45
         self.search_inner_speed = 0.08
 
