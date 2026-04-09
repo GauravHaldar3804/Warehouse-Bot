@@ -48,6 +48,7 @@ class AGVMotorControlNode(Node):
         self.calibration_start_time = 0.0
         self.calibration_segment_seconds = 2.0
         self.calibration_lateral_speed = 0.8
+        self.stream_ready = False
 
         self.timer = self.create_timer(0.02, self.read_serial)  # 50 Hz
 
@@ -151,12 +152,14 @@ class AGVMotorControlNode(Node):
                 if line.startswith('#CALIBRATING') and not self.calibration_active:
                     self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
                     self.calibration_active = True
+                    self.stream_ready = False
                     self.calibration_start_time = now
                     self.stop_all_motors()
 
                 # End calibration when Arduino starts streaming CSV.
                 if line.startswith('#STREAM_START') and self.calibration_active:
                     self.calibration_active = False
+                    self.stream_ready = True
                     self.stop_all_motors()
                     self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
                     return
@@ -169,6 +172,11 @@ class AGVMotorControlNode(Node):
                 segment_index = int(elapsed // self.calibration_segment_seconds)
                 direction = -1 if segment_index % 2 == 0 else 1
                 self.set_lateral_speed(direction * self.calibration_lateral_speed)
+                return
+
+            # Keep motors stopped until calibration starts and stream is ready.
+            if not self.stream_ready:
+                self.stop_all_motors()
                 return
 
             # === Normal Line Following Mode ===
