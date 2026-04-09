@@ -136,8 +136,20 @@ class AGVMotorControlNode(Node):
 
     def read_serial(self):
         try:
-            line = self.ser.readline().decode('utf-8', errors='ignore').strip()
             now = time.monotonic()
+
+            # Drain buffered serial data so control uses the newest frame.
+            latest_line = ""
+            while self.ser.in_waiting > 0:
+                raw = self.ser.readline()
+                if not raw:
+                    break
+                latest_line = raw.decode('utf-8', errors='ignore').strip()
+
+            # Fallback read when no buffered data is pending.
+            line = latest_line
+            if not line:
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
 
             if line.startswith('#'):
                 if (
