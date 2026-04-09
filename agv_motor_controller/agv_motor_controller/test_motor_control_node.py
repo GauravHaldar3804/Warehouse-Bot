@@ -42,12 +42,8 @@ class AGVMotorControlNode(Node):
 
         self.calibration_active = False
         self.calibration_start_time = 0.0
-        self.calibration_duration = 10.0
         self.calibration_segment_seconds = 2.0
         self.calibration_lateral_speed = 0.8
-        self.calibration_last_segment_index = -1
-
-        self.get_logger().info("AGV Node Started - Waiting for Arduino calibration...")
 
         self.timer = self.create_timer(0.02, self.read_serial)  # 50 Hz
 
@@ -78,6 +74,7 @@ class AGVMotorControlNode(Node):
     def apply_line_control(self, error):
         if error == 9999.0 or abs(error) > 10:
             self.stop_all_motors()
+            self.get_logger().info("line_error=9999.00, left_pwm=0, right_pwm=0, left_cmd=0.000, right_cmd=0.000")
             return
 
         self.integral += error * 0.02
@@ -113,36 +110,28 @@ class AGVMotorControlNode(Node):
 
             now = time.monotonic()
 
-            if line.startswith('#'):
-                self.get_logger().info(f"arduino_msg: {line}")
-
-            # === Start Calibration when Arduino sends this message ===
-            if "#CALIBRATING 10 SECONDS" in line and not self.calibration_active:
+            # Start calibration when Arduino announces it.
+            if line.startswith('#CALIBRATING') and not self.calibration_active:
                 self.get_logger().info("=== SENSOR CALIBRATION STARTED ===")
                 self.calibration_active = True
                 self.calibration_start_time = now
-                self.calibration_last_segment_index = -1
                 self.stop_all_motors()
+                return
+
+            # End calibration when Arduino starts streaming CSV.
+            if line.startswith('#STREAM_START') and self.calibration_active:
+                self.calibration_active = False
+                self.stop_all_motors()
+                self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
+                return
 
             # === Perform Lateral Movement during calibration ===
             if self.calibration_active:
                 elapsed = now - self.calibration_start_time
 
-                if elapsed >= self.calibration_duration:
-                    self.calibration_active = False
-                    self.stop_all_motors()
-                    self.get_logger().info("=== CALIBRATION COMPLETED - Starting Line Following ===")
-                    return
-
                 # Alternate: 2s left, 2s right, repeated until calibration ends.
                 segment_index = int(elapsed // self.calibration_segment_seconds)
                 direction = -1 if segment_index % 2 == 0 else 1
-
-                if segment_index != self.calibration_last_segment_index:
-                    side = "LEFT" if direction < 0 else "RIGHT"
-                    self.get_logger().info(f"calibration_motion: {side} (segment={segment_index}, elapsed={elapsed:.2f}s)")
-                    self.calibration_last_segment_index = segment_index
-
                 self.set_lateral_speed(direction * self.calibration_lateral_speed)
                 return
 
@@ -151,15 +140,14 @@ class AGVMotorControlNode(Node):
                 return
 
             data = line.split(',')
-            if len(data) < 5:
+            # Expected CSV from Arduino:
+            # error,FL,RL,FR,RR,n0,n1,n2,n3,n4,n5,n6,n7
+            if len(data) < 13:
                 return
 
-            error = float(data[0])
-            sensors = [float(v.strip()) for v in data[1:5]]
-
-            self.get_logger().info(
-                f"line_sensors={sensors[0]:.2f},{sensors[1]:.2f},{sensors[2]:.2f},{sensors[3]:.2f}"
-            )
+            error = float(data[0].strip())
+            _encoders = [int(data[i].strip()) for i in range(1, 5)]
+            _sensor_norm = [int(data[i].strip()) for i in range(5, 13)]
 
             self.apply_line_control(error)
 
