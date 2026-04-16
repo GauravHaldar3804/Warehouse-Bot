@@ -153,6 +153,8 @@ class CameraNode(Node):
         if img is None:
             return
 
+        img = cv2.rotate(img, cv2.ROTATE_180)
+
         # FPS calculation
         now = time.time()
         self.fps = 1.0 / (now - self.prev_time)
