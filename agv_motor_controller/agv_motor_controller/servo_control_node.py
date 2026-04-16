@@ -9,8 +9,8 @@ from adafruit_pca9685 import PCA9685
 I2C_ADDRESS = 0x40
 
 # Servo channels on PCA9685
-SERVO_1_CHANNEL = 4
-SERVO_2_CHANNEL = 5
+SERVO_1_CHANNEL = 8
+SERVO_2_CHANNEL = 9
 
 # Servo PWM calibration - SG90 servos
 # SG90 uses: 1.0 - 2.0 ms pulse width
