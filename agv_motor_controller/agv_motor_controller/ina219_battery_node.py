@@ -46,6 +46,16 @@ class INA219BatteryNode(Node):
             f"INA219 battery node started: addr=0x{self.i2c_address:02X}, "
             f"rate={self.publish_rate_hz:.2f}Hz, topics=({self.state_topic}, {self.metrics_topic})"
         )
+        self.get_logger().info(
+            "Parameters: "
+            f"publish_rate_hz={self.publish_rate_hz:.2f}, "
+            f"i2c_address=0x{self.i2c_address:02X}, "
+            f"battery_full_voltage={self.battery_full_voltage:.2f}, "
+            f"battery_empty_voltage={self.battery_empty_voltage:.2f}, "
+            f"design_capacity_ah={self.design_capacity_ah:.2f}, "
+            f"state_topic={self.state_topic}, "
+            f"metrics_topic={self.metrics_topic}"
+        )
 
     def _estimate_percentage(self, voltage: float) -> float:
         denom = self.battery_full_voltage - self.battery_empty_voltage
