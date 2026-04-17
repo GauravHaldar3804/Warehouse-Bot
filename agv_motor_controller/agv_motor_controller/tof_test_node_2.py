@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32
 from std_msgs.msg import String
+from std_msgs.msg import Bool
 
 import board
 import busio
@@ -23,12 +24,13 @@ class DualVL53L0X(Node):
         self.pub1 = self.create_publisher(Float32, '/tof1/distance', 10)
         self.pub2 = self.create_publisher(Float32, '/tof2/distance', 10)
         self.pub3 = self.create_publisher(Float32, '/tof3/distance', 10)
+        self.obstacle_pub = self.create_publisher(Bool, '/tof/obstacle_detected', 10)
         self.motor_command_pub = self.create_publisher(String, 'motor_command', 10)
         self.motor_command_sub = self.create_subscription(String, 'motor_command', self.motor_command_callback, 10)
 
         # Obstacle gating: 40 cm threshold, 2 sec persistence
         self.obstacle_threshold_mm = 400.0
-        self.persistence_seconds = 2.0
+        self.persistence_seconds = 0.5
         self.obstacle_active = False
         self.obstacle_below_since = None
         self.clear_since = None
@@ -161,6 +163,10 @@ class DualVL53L0X(Node):
                     self.obstacle_below_since = None
             else:
                 self.clear_since = None
+
+        obstacle_msg = Bool()
+        obstacle_msg.data = self.obstacle_active
+        self.obstacle_pub.publish(obstacle_msg)
         
         # Print values to terminal
         # print(f"TOF Distance [mm]  |  Sensor 1: {dist1:6.1f}  |  Sensor 2: {dist2:6.1f}", flush=True)
