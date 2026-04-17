@@ -15,6 +15,7 @@ import adafruit_vl53l0x
 XSHUT_1 = 22
 XSHUT_2 = 27
 XSHUT_3 = 23  # Uncomment when 3rd sensor is available
+BUZZER_PIN = 17
 
 class DualVL53L0X(Node):
     def __init__(self):
@@ -38,11 +39,19 @@ class DualVL53L0X(Node):
         self.resume_needed = False
         self._ignore_next_command = None
 
+        # Buzzer pattern: beep while obstacle is active.
+        self.beep_on_seconds = 0.2
+        self.beep_off_seconds = 0.2
+        self._beep_state_on = False
+        self._last_beep_toggle = time.monotonic()
+
         # Setup GPIO
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(XSHUT_1, GPIO.OUT)
         GPIO.setup(XSHUT_2, GPIO.OUT)
         GPIO.setup(XSHUT_3, GPIO.OUT)
+        GPIO.setup(BUZZER_PIN, GPIO.OUT)
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
 
         # Turn OFF both sensors
         GPIO.output(XSHUT_1, GPIO.LOW)
@@ -167,12 +176,27 @@ class DualVL53L0X(Node):
         obstacle_msg = Bool()
         obstacle_msg.data = self.obstacle_active
         self.obstacle_pub.publish(obstacle_msg)
+        self.update_buzzer(now)
         
         # Print values to terminal
         # print(f"TOF Distance [mm]  |  Sensor 1: {dist1:6.1f}  |  Sensor 2: {dist2:6.1f}", flush=True)
         print(f"TOF Distance [mm]  |  Sensor 1: {dist1:6.1f}  |  Sensor 2: {dist2:6.1f}  |  Sensor 3: {dist3:6.1f}", flush=True)
 
+    def update_buzzer(self, now: float):
+        if not self.obstacle_active:
+            self._beep_state_on = False
+            GPIO.output(BUZZER_PIN, GPIO.LOW)
+            self._last_beep_toggle = now
+            return
+
+        interval = self.beep_on_seconds if self._beep_state_on else self.beep_off_seconds
+        if (now - self._last_beep_toggle) >= interval:
+            self._beep_state_on = not self._beep_state_on
+            GPIO.output(BUZZER_PIN, GPIO.HIGH if self._beep_state_on else GPIO.LOW)
+            self._last_beep_toggle = now
+
     def destroy_node(self):
+        GPIO.output(BUZZER_PIN, GPIO.LOW)
         GPIO.cleanup()
         super().destroy_node()
 

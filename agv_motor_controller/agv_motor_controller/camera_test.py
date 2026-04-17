@@ -67,6 +67,7 @@ class CameraNode(Node):
         self.last_motor_command = 'NONE'
         self.command_sent_this_frame = False
         self.last_path_signature = ''
+        self._shutdown_stop_sent = False
 
         self.bridge = CvBridge()
 
@@ -308,6 +309,19 @@ class CameraNode(Node):
         self.command_sent_this_frame = True
         print(f"MOTOR_COMMAND_SENT: {direction}", flush=True)
         self.get_logger().info(f"🎯 MOTOR COMMAND: {direction}")
+
+    def send_shutdown_stop_once(self, reason='shutdown'):
+        if self._shutdown_stop_sent:
+            return
+
+        try:
+            self.publish_motor_command("STOP")
+            self._shutdown_stop_sent = True
+            self.get_logger().warn(f"Safety STOP sent during {reason}")
+            # Give transport a brief chance to flush the STOP command.
+            time.sleep(0.15)
+        except Exception as e:
+            self.get_logger().error(f"Failed to send shutdown STOP: {e}")
 
     # =========================
     # �🚀 IMPROVED INTERSECTION DETECTION
@@ -608,6 +622,7 @@ class CameraNode(Node):
         return np.degrees(np.arctan2(dy, dx))
 
     def destroy_node(self):
+        self.send_shutdown_stop_once('node destroy')
         self.running = False
         self.thread.join(timeout=2.0)
         self.sock.close()
@@ -623,7 +638,10 @@ def main(args=None):
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        node.get_logger().error(f"Camera node fatal error: {e}")
     finally:
+        node.send_shutdown_stop_once('main exit')
         node.destroy_node()
         rclpy.shutdown()
 

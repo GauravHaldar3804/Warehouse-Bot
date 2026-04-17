@@ -56,7 +56,6 @@ setup(
         'binary_realtime_motor_control_node = agv_motor_controller.binary_realtime_motor_control_node:main',
         'motor_command_serial_bridge = agv_motor_controller.motor_command_serial_bridge:main',
         'ina219_battery_node = agv_motor_controller.ina219_battery_node:main',
-        'obstacle_buzzer_node = agv_motor_controller.buzzer_obstacle_node:main',
     ],
 },
 )
