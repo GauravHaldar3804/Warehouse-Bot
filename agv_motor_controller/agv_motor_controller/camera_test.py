@@ -144,19 +144,36 @@ class CameraNode(Node):
 
     def receive_frames(self):
         MARKER = 0xDEADBEEF
+        MAX_FRAME_SIZE = 2 * 1024 * 1024  # 2 MB safety cap
 
         while self.running:
             try:
+                # Wait for a valid 4-byte frame marker.
                 while True:
                     data, addr = self.sock.recvfrom(4096)
                     if data == b"ACK":
                         self.get_logger().info(f"🤝 ESP32 ready at {addr}")
                         continue
-                    if len(data) == 4 and struct.unpack("I", data)[0] == MARKER:
+
+                    if len(data) != 4:
+                        continue
+
+                    marker = struct.unpack("<I", data)[0]
+                    if marker == MARKER:
                         break
 
+                # Next packet must be a 4-byte frame size. If not, re-sync.
                 data, _ = self.sock.recvfrom(4096)
-                frame_size = struct.unpack("I", data)[0]
+                if len(data) != 4:
+                    self.get_logger().warning(
+                        f"Dropping invalid frame-size packet ({len(data)} bytes)"
+                    )
+                    continue
+
+                frame_size = struct.unpack("<I", data)[0]
+                if frame_size <= 0 or frame_size > MAX_FRAME_SIZE:
+                    self.get_logger().warning(f"Dropping frame with invalid size: {frame_size}")
+                    continue
 
                 frame_data = bytearray()
                 while len(frame_data) < frame_size:
