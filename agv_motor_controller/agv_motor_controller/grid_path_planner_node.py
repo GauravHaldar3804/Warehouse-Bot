@@ -18,7 +18,7 @@ class GridPathPlannerNode(Node):
         super().__init__('grid_path_planner_node')
         
         # Initialize the grid path planner
-        self.planner = GridPathPlanner(grid_size=4)
+        self.planner = GridPathPlanner(num_cols=4, num_rows=3)
         
         # Create subscriber for path queries
         self.query_subscription = self.create_subscription(
@@ -36,7 +36,9 @@ class GridPathPlannerNode(Node):
         )
         
         self.get_logger().info('Grid Path Planner Node initialized')
-        self.get_logger().info(f'Grid size: 4x4 | Total nodes: {len(self.planner.nodes)}')
+        self.get_logger().info(
+            f'Grid size: {self.planner.num_cols}x{self.planner.num_rows} | Total nodes: {len(self.planner.nodes)}'
+        )
         self.get_logger().info('Subscribed to: path_query')
         self.get_logger().info('Publishing to: path_result')
     

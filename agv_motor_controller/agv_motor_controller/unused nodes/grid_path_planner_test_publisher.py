@@ -82,7 +82,7 @@ def main(args=None):
     
     # Test queries
     test_queries = [
-        ('A1', 'D4'),
+        ('A1', 'D3'),
         ('B2', 'HOME-3'),
         ('C3', 'DOC-BC3'),
         ('A1', 'HOME-1'),
