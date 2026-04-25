@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'agv_motor_controller'
@@ -10,6 +11,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=[
         'setuptools',
@@ -47,6 +49,7 @@ setup(
         'servo_control = agv_motor_controller.servo_control_node:main',
         'camera_node = agv_motor_controller.camera_node:main',
         'camera_test = agv_motor_controller.camera_test:main',
+        'realtime_grid_visualizer_node = agv_motor_controller.realtime_grid_visualizer_node:main',
         'grid_path_planner_node = agv_motor_controller.grid_path_planner_node:main',
         'path_result_monitor = agv_motor_controller.path_result_monitor:main',
         'serial_node = agv_motor_controller.serial_node:main',

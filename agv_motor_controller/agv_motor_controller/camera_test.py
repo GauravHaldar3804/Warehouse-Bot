@@ -23,9 +23,13 @@ class CameraNode(Node):
         # Parameters
         self.declare_parameter('udp_ip', '0.0.0.0')
         self.declare_parameter('udp_port', 1234)
+        self.declare_parameter('use_laptop_camera', True)
+        self.declare_parameter('laptop_camera_index', 0)
 
         self.udp_ip = self.get_parameter('udp_ip').value
         self.udp_port = self.get_parameter('udp_port').value
+        self.use_laptop_camera = bool(self.get_parameter('use_laptop_camera').value)
+        self.laptop_camera_index = int(self.get_parameter('laptop_camera_index').value)
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -54,6 +58,7 @@ class CameraNode(Node):
         self.navigation_actions = []
         self.last_node_event_time = 0.0
         self.node_event_cooldown_sec = 1.0
+        self.same_node_wrong_grace_sec = 10.0
 
         # Heading estimation config
         self.declare_parameter('agv_heading_offset_deg', 0.0)
@@ -76,16 +81,24 @@ class CameraNode(Node):
 
         self.qr_detector = cv2.QRCodeDetector()
 
-        self.setup_socket()
+        self.cap = None
 
-        self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
-        self.handshake_thread.start()
+        # Temporary local testing mode: use laptop webcam instead of ESP32 UDP stream.
+        # self.setup_socket()
+        # self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
+        # self.handshake_thread.start()
+        if not self.use_laptop_camera:
+            self.setup_socket()
+            self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
+            self.handshake_thread.start()
 
         self.running = True
         self.thread = Thread(target=self.receive_frames, daemon=True)
         self.thread.start()
-
-        self.get_logger().info(f"Listening on {self.udp_ip}:{self.udp_port}")
+        if self.use_laptop_camera:
+            self.get_logger().info(f"Using laptop camera index {self.laptop_camera_index} for temporary testing")
+        else:
+            self.get_logger().info(f"Listening on {self.udp_ip}:{self.udp_port}")
         self.get_logger().info(
             f"Heading config: offset={self.agv_heading_offset_deg:.1f} deg, invert_east_west={self.invert_east_west}"
         )
@@ -146,6 +159,30 @@ class CameraNode(Node):
     def receive_frames(self):
         MARKER = 0xDEADBEEF
         MAX_FRAME_SIZE = 2 * 1024 * 1024  # 2 MB safety cap
+
+        if self.use_laptop_camera:
+            self.cap = cv2.VideoCapture(self.laptop_camera_index)
+            if not self.cap.isOpened():
+                self.get_logger().error(
+                    f"Could not open laptop camera index {self.laptop_camera_index}. "
+                    "Set laptop_camera_index parameter to a valid camera id."
+                )
+                return
+
+            while self.running:
+                ok, img = self.cap.read()
+                if not ok or img is None:
+                    self.get_logger().warning("Failed to read frame from laptop camera")
+                    time.sleep(0.05)
+                    continue
+
+                # Reuse existing processing pipeline that expects encoded frame bytes.
+                success, enc = cv2.imencode('.jpg', img)
+                if not success:
+                    continue
+
+                self.process_frame(enc.tobytes())
+            return
 
         while self.running:
             try:
@@ -609,6 +646,18 @@ class CameraNode(Node):
                 self.pending_command_source_heading = None
                 self.pending_expected_heading = "DONE"
         else:
+            # If camera still sees the previously confirmed node, allow a grace
+            # period before flagging it as wrong to avoid immediate false alarms.
+            last_confirmed_node = self.visited_nodes[-1] if self.visited_nodes else None
+            if last_confirmed_node and detected_qr == last_confirmed_node:
+                elapsed_since_last_confirmed = now - self.last_node_event_time
+                if elapsed_since_last_confirmed < self.same_node_wrong_grace_sec:
+                    remaining = self.same_node_wrong_grace_sec - elapsed_since_last_confirmed
+                    self.get_logger().info(
+                        f"Same node {detected_qr} re-detected; waiting {remaining:.1f}s before marking WRONG"
+                    )
+                    return
+
             # ❌ WRONG NODE DETECTED
             self.get_logger().warn(f"❌ WRONG NODE! Expected {expected_node}, but detected {detected_qr}")
 
@@ -625,7 +674,10 @@ class CameraNode(Node):
         self.send_shutdown_stop_once('node destroy')
         self.running = False
         self.thread.join(timeout=2.0)
-        self.sock.close()
+        if self.cap is not None:
+            self.cap.release()
+        if hasattr(self, 'sock'):
+            self.sock.close()
         cv2.destroyAllWindows()
         super().destroy_node()
 
