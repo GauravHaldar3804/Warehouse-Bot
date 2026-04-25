@@ -53,15 +53,13 @@ setup(
         'grid_path_planner_node = agv_motor_controller.grid_path_planner_node:main',
         'path_result_monitor = agv_motor_controller.path_result_monitor:main',
         'serial_node = agv_motor_controller.serial_node:main',
-        'test_line_control_node = agv_motor_controller.test_line_control_node:main',
-        'test_motor_control_node = agv_motor_controller.test_motor_control_node:main',
-
         'line_follower_node = agv_motor_controller.line_follower_node:main',
         'test_line_control_node = agv_motor_controller.test_line_control_node:main',
         'test_motor_control_node = agv_motor_controller.test_motor_control_node:main',
         'binary_realtime_motor_control_node = agv_motor_controller.binary_realtime_motor_control_node:main',
         'motor_command_serial_bridge = agv_motor_controller.motor_command_serial_bridge:main',
         'ina219_battery_node = agv_motor_controller.ina219_battery_node:main',
+        'agv_demo_topic_node = agv_motor_controller.agv_demo_topic_node:main',
     ],
 },
 )

@@ -4,15 +4,15 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
-import random
 
 
 class AGVStatusPage(QWidget):
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, ros_node=None):
         super().__init__()
 
         self.main_window = main_window
+        self.ros_node = ros_node
         self.setStyleSheet("background-color:#eef2f5;")
 
         main_layout = QVBoxLayout()
@@ -52,11 +52,11 @@ class AGVStatusPage(QWidget):
         grid = QGridLayout()
         grid.setSpacing(20)
 
-        self.connection = self.create_card("Connection","Online","#2ecc71")
-        self.battery = self.create_card("Battery","100%","#27ae60")
-        self.position = self.create_card("Position","A1","#34495e")
-        self.target = self.create_card("Target","Station A","#8e44ad")
-        self.state = self.create_card("State","Idle","#f39c12")
+        self.connection = self.create_card("Connection", "Waiting for ROS", "#2ecc71")
+        self.battery = self.create_card("Battery", "--", "#27ae60")
+        self.position = self.create_card("Position", "HOME-1", "#34495e")
+        self.target = self.create_card("Target", "--", "#8e44ad")
+        self.state = self.create_card("State", "Waiting for mission", "#f39c12")
 
         grid.addWidget(self.connection,0,0)
         grid.addWidget(self.battery,0,1)
@@ -74,9 +74,7 @@ class AGVStatusPage(QWidget):
         # ---------------- LIVE UPDATE ----------------
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_status)
-        self.timer.start(3000)
-
-        self.battery_level = 100
+        self.timer.start(300)
 
     # CREATE STATUS CARD
     def create_card(self,title,value,color):
@@ -111,20 +109,32 @@ class AGVStatusPage(QWidget):
 
     # UPDATE STATUS
     def update_status(self):
+        if self.ros_node is None:
+            self.connection.value_label.setText('ROS node not available')
+            self.connection.value_label.setStyleSheet('color:red')
+            return
 
-        positions = ["A1","A2","A3","B1","B2"]
-        targets = ["Station A","Station B","Station C"]
-        states = ["Idle","Navigating","Picking","Delivering"]
+        status = self.ros_node.get_status_snapshot()
 
-        self.battery_level -= random.randint(0,2)
-
-        if self.battery_level < 20:
-            self.battery.value_label.setStyleSheet("color:red")
+        self.connection.value_label.setText(status.get('connection', 'Unknown'))
+        if status.get('connection') == 'Topics active':
+            self.connection.value_label.setStyleSheet('color:green')
         else:
-            self.battery.value_label.setStyleSheet("color:green")
+            self.connection.value_label.setStyleSheet('color:#d35400')
 
-        self.battery.value_label.setText(str(self.battery_level)+"%")
+        battery_text = status.get('battery', '--')
+        self.battery.value_label.setText(str(battery_text))
+        try:
+            battery_pct = int(str(battery_text).replace('%', '').strip())
+            if battery_pct < 20:
+                self.battery.value_label.setStyleSheet('color:red')
+            elif battery_pct < 50:
+                self.battery.value_label.setStyleSheet('color:#f39c12')
+            else:
+                self.battery.value_label.setStyleSheet('color:green')
+        except ValueError:
+            self.battery.value_label.setStyleSheet('color:#2c3e50')
 
-        self.position.value_label.setText(random.choice(positions))
-        self.target.value_label.setText(random.choice(targets))
-        self.state.value_label.setText(random.choice(states))
+        self.position.value_label.setText(status.get('position', '--'))
+        self.target.value_label.setText(status.get('target', '--'))
+        self.state.value_label.setText(status.get('state', 'Unknown'))

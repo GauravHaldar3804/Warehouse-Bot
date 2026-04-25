@@ -1,17 +1,22 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PyQt5.QtCore import QTimer
+import rclpy
+
 from pages.home import HomePage
 from pages.task_management import TaskPage
 from pages.agv_status import AGVStatusPage
 from pages.system_status import SystemStatusPage
 from pages.activity_log import ActivityLogPage
 from pages.warehouse_map import WarehouseMapPage
+from ros_interface.ros_node import DashboardRosNode
 
 
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, ros_node):
         super().__init__()
+        self.ros_node = ros_node
 
         self.setWindowTitle("AGV Control System")
         self.setGeometry(100,100,1000,700)
@@ -21,7 +26,7 @@ class MainWindow(QMainWindow):
 
         self.home = HomePage(self)
         self.task = TaskPage(self)
-        self.agv_status = AGVStatusPage(self)
+        self.agv_status = AGVStatusPage(self, self.ros_node)
         self.system_status = SystemStatusPage(self)
         self.activity_log = ActivityLogPage(self)
         self.map_page = WarehouseMapPage(self)
@@ -52,9 +57,28 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.map_page)
 
 
-app = QApplication(sys.argv)
+def main():
+    rclpy.init(args=None)
+    ros_node = DashboardRosNode()
 
-window = MainWindow()
-window.show()
+    app = QApplication(sys.argv)
+    window = MainWindow(ros_node)
+    window.show()
 
-sys.exit(app.exec_())
+    spin_timer = QTimer()
+    spin_timer.timeout.connect(lambda: rclpy.spin_once(ros_node, timeout_sec=0.0))
+    spin_timer.start(30)
+
+    exit_code = 0
+    try:
+        exit_code = app.exec_()
+    finally:
+        spin_timer.stop()
+        ros_node.destroy_node()
+        rclpy.shutdown()
+
+    sys.exit(exit_code)
+
+
+if __name__ == '__main__':
+    main()
