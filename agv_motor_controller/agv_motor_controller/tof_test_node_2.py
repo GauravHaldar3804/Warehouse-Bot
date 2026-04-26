@@ -158,6 +158,7 @@ class DualVL53L0X(Node):
                     self.obstacle_below_since = now
                 elif (now - self.obstacle_below_since) >= self.persistence_seconds:
                     self.publish_motor_command('STOP')
+                    self.publish_motor_command('OBSTACLE')
                     self.resume_needed = self.running_assumed
                     self.running_assumed = False
                     self.obstacle_active = True
@@ -169,6 +170,7 @@ class DualVL53L0X(Node):
                 if self.clear_since is None:
                     self.clear_since = now
                 elif (now - self.clear_since) >= self.persistence_seconds:
+                    self.publish_motor_command('CLEAR')
                     if self.resume_needed:
                         self.publish_motor_command('START')
                         self.running_assumed = True

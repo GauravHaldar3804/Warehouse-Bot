@@ -20,7 +20,10 @@ class MotorCommandSerialBridge(Node):
 
         self.ser = None
 
-        self.allowed_commands = {'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN', 'STOP', 'START'}
+        self.allowed_commands = {
+            'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN', 'STOP', 'START',
+            'OBSTACLE', 'CLEAR'
+        }
 
         self.subscription = self.create_subscription(
             String,
