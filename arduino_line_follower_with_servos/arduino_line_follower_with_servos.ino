@@ -18,7 +18,7 @@ const int searchFastSpeed = 255;
 const int searchSlowSpeed = -255;
 
 // ================= SPEED =================
-int baseSpeed = 180;
+int baseSpeed = 150;
 
 // ================= RUN CONTROL =================
 bool isRunning = false;
@@ -42,12 +42,17 @@ enum ManualCommand {
 ManualCommand manualCommand = CMD_NONE;
 
 const int manualStraightSpeed = 150;
-const int manualTurnSpeed = 170;
+const int manualTurnSpeed = 255;
 const unsigned long leftRightTurnDurationMs = 2000;
+const unsigned long goalForwardDurationMs = 4000;
+const unsigned long goalSpinDurationMs = 6000;
 const unsigned long uturnDurationMs = 4000;
+const unsigned long stopBeforeTurnDurationMs = 250;
 
 unsigned long manualCommandStartMs = 0;
 unsigned long manualCommandDurationMs = 0;
+unsigned long manualTurnStartMs = 0;
+bool manualStopBeforeTurnActive = false;
 
 // ================= ENCODERS (QUADRATURE) =================
 const uint8_t encRFPinA = 2;
@@ -123,11 +128,13 @@ void publishEncodersIfDue() {
   Serial.println(encLFCount);
 }
 
-void startTimedManualCommand(ManualCommand cmd, unsigned long durationMs) {
+void startTimedManualCommand(ManualCommand cmd, unsigned long durationMs, bool stopBeforeTurn = true) {
   controlMode = MODE_MANUAL;
   manualCommand = cmd;
   manualCommandStartMs = millis();
   manualCommandDurationMs = durationMs;
+  manualTurnStartMs = 0;
+  manualStopBeforeTurnActive = (cmd == CMD_LEFT || cmd == CMD_RIGHT || cmd == CMD_UTURN) && stopBeforeTurn;
 }
 
 void applyDrive(int leftSpeed, int rightSpeed) {
@@ -141,6 +148,16 @@ void applyDrive(int leftSpeed, int rightSpeed) {
 }
 
 void applyManualCommand() {
+  if (manualStopBeforeTurnActive) {
+    stopMotors();
+    if ((millis() - manualCommandStartMs) >= stopBeforeTurnDurationMs) {
+      manualStopBeforeTurnActive = false;
+      manualTurnStartMs = millis();
+      Serial.println("TURN START (IN-PLACE)");
+    }
+    return;
+  }
+
   switch (manualCommand) {
     case CMD_STRAIGHT:
       applyDrive(manualStraightSpeed, manualStraightSpeed);
@@ -326,31 +343,44 @@ void checkCommand() {
 
     if (cmd == "STRAIGHT" || cmd == "FORWARD") {
       isRunning = true;
-      controlMode = MODE_AUTO;
-      manualCommand = CMD_NONE;
-      manualCommandDurationMs = 0;
-      Serial.println("MANUAL STRAIGHT");
+      startTimedManualCommand(CMD_STRAIGHT, leftRightTurnDurationMs);
+      Serial.println("MANUAL STRAIGHT (2s)");
+      return;
+    }
+
+    if (cmd == "STRAIGHT4" || cmd == "FORWARD4") {
+      isRunning = true;
+      startTimedManualCommand(CMD_STRAIGHT, goalForwardDurationMs);
+      Serial.println("MANUAL STRAIGHT (4s)");
       return;
     }
 
     if (cmd == "LEFT") {
       isRunning = true;
       startTimedManualCommand(CMD_LEFT, leftRightTurnDurationMs);
-      Serial.println("MANUAL LEFT");
+      Serial.println("MANUAL LEFT (STOP->TURN)");
       return;
     }
 
     if (cmd == "RIGHT" || cmd == "TURN") {
       isRunning = true;
       startTimedManualCommand(CMD_RIGHT, leftRightTurnDurationMs);
-      Serial.println("MANUAL RIGHT");
+      Serial.println("MANUAL RIGHT (STOP->TURN)");
+      return;
+    }
+
+    if (cmd == "RIGHT6" || cmd == "SPIN360") {
+      isRunning = true;
+      // Goal spin must be continuous at full speed; skip stop-before-turn.
+      startTimedManualCommand(CMD_RIGHT, goalSpinDurationMs, false);
+      Serial.println("MANUAL RIGHT (6s CONTINUOUS)");
       return;
     }
 
     if (cmd == "UTURN") {
       isRunning = true;
       startTimedManualCommand(CMD_UTURN, uturnDurationMs);
-      Serial.println("MANUAL UTURN");
+      Serial.println("MANUAL UTURN (STOP->TURN)");
       return;
     }
   }
@@ -500,13 +530,24 @@ void loop() {
   if (controlMode == MODE_MANUAL) {
     applyManualCommand();
 
+    unsigned long manualElapsedMs = 0;
+    if (manualCommand == CMD_LEFT || manualCommand == CMD_RIGHT || manualCommand == CMD_UTURN) {
+      if (manualTurnStartMs > 0 && !manualStopBeforeTurnActive) {
+        manualElapsedMs = millis() - manualTurnStartMs;
+      }
+    } else {
+      manualElapsedMs = millis() - manualCommandStartMs;
+    }
+
     if (
       manualCommandDurationMs > 0 &&
-      (millis() - manualCommandStartMs) >= manualCommandDurationMs
+      manualElapsedMs >= manualCommandDurationMs
     ) {
       controlMode = MODE_AUTO;
       manualCommand = CMD_NONE;
       manualCommandDurationMs = 0;
+      manualTurnStartMs = 0;
+      manualStopBeforeTurnActive = false;
       Serial.println("MANUAL TURN DONE -> AUTO MODE");
     }
 
