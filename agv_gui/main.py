@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stack)
 
         self.home = HomePage(self)
-        self.task = TaskPage(self)
+        self.task = TaskPage(self, self.ros_node)
         self.agv_status = AGVStatusPage(self, self.ros_node)
         self.system_status = SystemStatusPage(self)
         self.activity_log = ActivityLogPage(self)

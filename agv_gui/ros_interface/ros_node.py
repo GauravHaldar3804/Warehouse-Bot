@@ -35,6 +35,9 @@ class DashboardRosNode(Node):
 		self.create_subscription(BatteryState, 'battery_state', self._on_battery_state, 10)
 		self.create_subscription(String, 'battery_metrics', self._on_battery_metrics, 10)
 		self.create_subscription(String, 'camera/qr_code', self._on_qr_code, self._camera_qos)
+		self.path_query_publisher = self.create_publisher(String, 'path_query', 10)
+		self.motor_command_publisher = self.create_publisher(String, 'motor_command', 10)
+
 		self.create_subscription(String, 'path_result', self._on_path_result, 10)
 		self.create_subscription(String, 'motor_command', self._on_motor_command, 10)
 		self.create_subscription(Bool, '/tof/obstacle_detected', self._on_obstacle, 10)
@@ -98,6 +101,26 @@ class DashboardRosNode(Node):
 		else:
 			self._status['state'] = cmd
 		self._touch()
+
+	def send_path_query(self, start: str, goal: str):
+		start_node = (start or '').strip().upper()
+		goal_node = (goal or '').strip().upper()
+		if not start_node or not goal_node:
+			return False
+
+		payload = json.dumps({'start': start_node, 'goal': goal_node})
+		self.path_query_publisher.publish(String(data=payload))
+		self.get_logger().info(f'Sent path query: {start_node} -> {goal_node}')
+		return True
+
+	def send_motor_command(self, command: str):
+		cmd = (command or '').strip().upper()
+		if not cmd:
+			return False
+
+		self.motor_command_publisher.publish(String(data=cmd))
+		self.get_logger().info(f'Sent motor command: {cmd}')
+		return True
 
 	def _on_obstacle(self, msg: Bool):
 		if msg.data:

@@ -8,11 +8,11 @@ from PyQt5.QtCore import Qt
 
 class TaskPage(QWidget):
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, ros_node=None):
         super().__init__()
 
-        # ✅ FIX: assign here
         self.main_window = main_window
+        self.ros_node = ros_node
         self.setStyleSheet("background-color:#eef2f5;")
 
         main_layout = QVBoxLayout()
@@ -155,10 +155,22 @@ class TaskPage(QWidget):
         if self.current_task.text() == "Current Task: None":
             self.current_task.setText(f"Current Task: {mission}")
 
-        # ✅ FIX: send to map
+        # Send mission to ROS path planner
+        if self.ros_node is not None:
+            status = self.ros_node.get_status_snapshot()
+            start_node = status.get('position', '').upper() or rack
+            drop_mapping = {
+                'Station A': 'HOME-1',
+                'Station B': 'HOME-2',
+                'Station C': 'HOME-3',
+            }
+            drop_node = drop_mapping.get(drop, drop)
+            self.ros_node.send_path_query(start_node, drop_node)
+
+        # send mission to UI map
         self.main_window.map_page.start_mission(rack, drop)
 
-        # ✅ FIX: switch page
+        # switch page
         self.main_window.show_map()
 
     # ---------------- COMPLETE TASK ----------------
