@@ -179,7 +179,7 @@ const uint8_t panServoChannel = 8;
 const uint8_t tiltServoChannel = 9;
 
 const int panLockDeg = 90;
-const int tiltDownDeg = 0;
+const int tiltDownDeg = 180;
 const int tiltFrontDeg = 90;
 
 // PCA9685 pulse counts for typical servos at 50 Hz.
