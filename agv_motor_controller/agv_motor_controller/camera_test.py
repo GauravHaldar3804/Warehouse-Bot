@@ -23,13 +23,15 @@ class CameraNode(Node):
         # Parameters
         self.declare_parameter('udp_ip', '0.0.0.0')
         self.declare_parameter('udp_port', 1234)
-        self.declare_parameter('use_laptop_camera', True)
-        self.declare_parameter('laptop_camera_index', 0)
+        # Laptop camera test mode disabled while using ESP-CAM hardware.
+        # self.declare_parameter('use_laptop_camera', True)
+        # self.declare_parameter('laptop_camera_index', 0)
 
         self.udp_ip = self.get_parameter('udp_ip').value
         self.udp_port = self.get_parameter('udp_port').value
-        self.use_laptop_camera = bool(self.get_parameter('use_laptop_camera').value)
-        self.laptop_camera_index = int(self.get_parameter('laptop_camera_index').value)
+        # Force ESP-CAM UDP stream.
+        self.use_laptop_camera = False
+        # self.laptop_camera_index = int(self.get_parameter('laptop_camera_index').value)
 
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -83,22 +85,14 @@ class CameraNode(Node):
 
         self.cap = None
 
-        # Temporary local testing mode: use laptop webcam instead of ESP32 UDP stream.
-        # self.setup_socket()
-        # self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
-        # self.handshake_thread.start()
-        if not self.use_laptop_camera:
-            self.setup_socket()
-            self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
-            self.handshake_thread.start()
+        self.setup_socket()
+        self.handshake_thread = Thread(target=self.send_handshake, daemon=True)
+        self.handshake_thread.start()
 
         self.running = True
         self.thread = Thread(target=self.receive_frames, daemon=True)
         self.thread.start()
-        if self.use_laptop_camera:
-            self.get_logger().info(f"Using laptop camera index {self.laptop_camera_index} for temporary testing")
-        else:
-            self.get_logger().info(f"Listening on {self.udp_ip}:{self.udp_port}")
+        self.get_logger().info(f"Listening on {self.udp_ip}:{self.udp_port}")
         self.get_logger().info(
             f"Heading config: offset={self.agv_heading_offset_deg:.1f} deg, invert_east_west={self.invert_east_west}"
         )
@@ -160,29 +154,9 @@ class CameraNode(Node):
         MARKER = 0xDEADBEEF
         MAX_FRAME_SIZE = 2 * 1024 * 1024  # 2 MB safety cap
 
-        if self.use_laptop_camera:
-            self.cap = cv2.VideoCapture(self.laptop_camera_index)
-            if not self.cap.isOpened():
-                self.get_logger().error(
-                    f"Could not open laptop camera index {self.laptop_camera_index}. "
-                    "Set laptop_camera_index parameter to a valid camera id."
-                )
-                return
-
-            while self.running:
-                ok, img = self.cap.read()
-                if not ok or img is None:
-                    self.get_logger().warning("Failed to read frame from laptop camera")
-                    time.sleep(0.05)
-                    continue
-
-                # Reuse existing processing pipeline that expects encoded frame bytes.
-                success, enc = cv2.imencode('.jpg', img)
-                if not success:
-                    continue
-
-                self.process_frame(enc.tobytes())
-            return
+        # Laptop camera branch intentionally disabled for ESP-CAM usage.
+        # if self.use_laptop_camera:
+        #     ...
 
         while self.running:
             try:

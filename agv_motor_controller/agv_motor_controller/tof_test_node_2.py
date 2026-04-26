@@ -15,7 +15,7 @@ import adafruit_vl53l0x
 XSHUT_1 = 22
 XSHUT_2 = 27
 XSHUT_3 = 23  # Uncomment when 3rd sensor is available
-BUZZER_PIN = 17
+BUZZER_PIN = 24
 
 class DualVL53L0X(Node):
     def __init__(self):
