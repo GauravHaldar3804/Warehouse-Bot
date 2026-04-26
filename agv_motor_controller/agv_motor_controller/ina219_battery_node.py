@@ -25,6 +25,7 @@ class INA219BatteryNode(Node):
         self.declare_parameter('state_topic', 'battery_state')
         self.declare_parameter('metrics_topic', 'battery_metrics')
         self.declare_parameter('status_text_topic', 'battery_status_text')
+        self.declare_parameter('log_rate_hz', 2.0)
 
         self.publish_rate_hz = float(self.get_parameter('publish_rate_hz').value)
         self.i2c_address = int(self.get_parameter('i2c_address').value)
@@ -34,17 +35,20 @@ class INA219BatteryNode(Node):
         self.state_topic = str(self.get_parameter('state_topic').value)
         self.metrics_topic = str(self.get_parameter('metrics_topic').value)
         self.status_text_topic = str(self.get_parameter('status_text_topic').value)
+        self.log_rate_hz = float(self.get_parameter('log_rate_hz').value)
 
         self.battery_pub = self.create_publisher(BatteryState, self.state_topic, 10)
         self.metrics_pub = self.create_publisher(String, self.metrics_topic, 10)
         self.status_text_pub = self.create_publisher(String, self.status_text_topic, 10)
         self.read_fail_count = 0
+        self._publish_count = 0
 
         i2c = busio.I2C(board.SCL, board.SDA)
         self.ina219 = INA219(i2c, addr=self.i2c_address)
 
         timer_period = max(0.05, 1.0 / max(0.1, self.publish_rate_hz))
         self.timer = self.create_timer(timer_period, self.publish_battery_state)
+        self._log_every_n_publishes = max(1, int(round(self.publish_rate_hz / max(0.1, self.log_rate_hz))))
 
         self.get_logger().info(
             f"INA219 battery node started: addr=0x{self.i2c_address:02X}, "
@@ -59,7 +63,8 @@ class INA219BatteryNode(Node):
             f"design_capacity_ah={self.design_capacity_ah:.2f}, "
             f"state_topic={self.state_topic}, "
             f"metrics_topic={self.metrics_topic}, "
-            f"status_text_topic={self.status_text_topic}"
+            f"status_text_topic={self.status_text_topic}, "
+            f"log_rate_hz={self.log_rate_hz:.2f}"
         )
 
     def _estimate_percentage(self, voltage: float) -> float:
@@ -149,6 +154,10 @@ class INA219BatteryNode(Node):
             }
             self.metrics_pub.publish(String(data=json.dumps(metrics)))
             self.status_text_pub.publish(String(data=summary))
+
+            self._publish_count += 1
+            if self._publish_count % self._log_every_n_publishes == 0:
+                self.get_logger().info(summary)
 
         except Exception as exc:
             self.read_fail_count += 1
