@@ -49,6 +49,80 @@ const unsigned long uturnDurationMs = 4000;
 unsigned long manualCommandStartMs = 0;
 unsigned long manualCommandDurationMs = 0;
 
+// ================= ENCODERS (QUADRATURE) =================
+const uint8_t encRFPinA = 2;
+const uint8_t encRFPinB = 3;
+const uint8_t encRBPinA = 4;
+const uint8_t encRBPinB = 5;
+const uint8_t encLBPinA = 6;
+const uint8_t encLBPinB = 7;
+const uint8_t encLFPinA = 8;
+const uint8_t encLFPinB = 9;
+
+long encRFCount = 0;
+long encRBCount = 0;
+long encLBCount = 0;
+long encLFCount = 0;
+
+uint8_t encRFPrevState = 0;
+uint8_t encRBPrevState = 0;
+uint8_t encLBPrevState = 0;
+uint8_t encLFPrevState = 0;
+
+unsigned long lastEncoderPublishMs = 0;
+const unsigned long encoderPublishIntervalMs = 10;  // 100 Hz encoder stream
+unsigned long lastStatusPrintMs = 0;
+const unsigned long statusPrintIntervalMs = 200;
+
+int8_t quadratureDelta(uint8_t prevState, uint8_t currState) {
+  // Index = (prevAB << 2) | currAB
+  // Valid forward transitions => +1, reverse => -1, invalid/bounce => 0
+  static const int8_t table[16] = {
+    0, -1,  1,  0,
+    1,  0,  0, -1,
+   -1,  0,  0,  1,
+    0,  1, -1,  0
+  };
+  return table[(prevState << 2) | currState];
+}
+
+uint8_t readEncoderAB(uint8_t pinA, uint8_t pinB) {
+  uint8_t a = (uint8_t)digitalRead(pinA);
+  uint8_t b = (uint8_t)digitalRead(pinB);
+  return (uint8_t)((a << 1) | b);
+}
+
+void updateOneEncoder(long &count, uint8_t pinA, uint8_t pinB, uint8_t &prevState) {
+  uint8_t currState = readEncoderAB(pinA, pinB);
+  int8_t delta = quadratureDelta(prevState, currState);
+  count += delta;
+  prevState = currState;
+}
+
+void updateEncoders() {
+  updateOneEncoder(encRFCount, encRFPinA, encRFPinB, encRFPrevState);
+  updateOneEncoder(encRBCount, encRBPinA, encRBPinB, encRBPrevState);
+  updateOneEncoder(encLBCount, encLBPinA, encLBPinB, encLBPrevState);
+  updateOneEncoder(encLFCount, encLFPinA, encLFPinB, encLFPrevState);
+}
+
+void publishEncodersIfDue() {
+  unsigned long now = millis();
+  if ((now - lastEncoderPublishMs) < encoderPublishIntervalMs) return;
+  lastEncoderPublishMs = now;
+
+  // Prefix with ENC so Raspberry Pi parser can filter robustly.
+  // Format: ENC,<rf>,<rb>,<lb>,<lf>
+  Serial.print("ENC,");
+  Serial.print(encRFCount);
+  Serial.print(',');
+  Serial.print(encRBCount);
+  Serial.print(',');
+  Serial.print(encLBCount);
+  Serial.print(',');
+  Serial.println(encLFCount);
+}
+
 void startTimedManualCommand(ManualCommand cmd, unsigned long durationMs) {
   controlMode = MODE_MANUAL;
   manualCommand = cmd;
@@ -134,6 +208,7 @@ void updateCameraServos() {
 // ================= SETUP =================
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(2);
 
   pwm.begin();
   // Servo channels on PCA9685 require 50 Hz timing.
@@ -143,6 +218,20 @@ void setup() {
   pinMode(s1, OUTPUT);
   pinMode(s2, OUTPUT);
   pinMode(s3, OUTPUT);
+
+  pinMode(encRFPinA, INPUT_PULLUP);
+  pinMode(encRFPinB, INPUT_PULLUP);
+  pinMode(encRBPinA, INPUT_PULLUP);
+  pinMode(encRBPinB, INPUT_PULLUP);
+  pinMode(encLBPinA, INPUT_PULLUP);
+  pinMode(encLBPinB, INPUT_PULLUP);
+  pinMode(encLFPinA, INPUT_PULLUP);
+  pinMode(encLFPinB, INPUT_PULLUP);
+
+  encRFPrevState = readEncoderAB(encRFPinA, encRFPinB);
+  encRBPrevState = readEncoderAB(encRBPinA, encRBPinB);
+  encLBPrevState = readEncoderAB(encLBPinA, encLBPinB);
+  encLFPrevState = readEncoderAB(encLFPinA, encLFPinB);
 
   updateCameraServos();
 
@@ -220,6 +309,15 @@ void checkCommand() {
       return;
     }
 
+    if (cmd == "ENC_RESET") {
+      encRFCount = 0;
+      encRBCount = 0;
+      encLBCount = 0;
+      encLFCount = 0;
+      Serial.println("ENCODERS RESET");
+      return;
+    }
+
     // Strict START/STOP gate: ignore motion commands until START is received.
     if (!isRunning) {
       Serial.println("IGNORED (STOPPED): send START first");
@@ -294,6 +392,8 @@ void calibrateSensors() {
   startTime = millis();
 
   while (millis() - startTime < 2000) {
+    updateEncoders();
+    publishEncodersIfDue();
     setMotor(6,7,-120);
     setMotor(4,5,120);
     setMotor(0,1,120);
@@ -311,6 +411,8 @@ void calibrateSensors() {
   startTime = millis();
 
   while (millis() - startTime < 2000) {
+    updateEncoders();
+    publishEncodersIfDue();
     setMotor(6,7,120);
     setMotor(4,5,-120);
     setMotor(0,1,-120);
@@ -384,6 +486,8 @@ int computePID(float error) {
 // ================= LOOP =================
 void loop() {
 
+  updateEncoders();
+  publishEncodersIfDue();
   checkCommand();
 
   if (!isRunning) {
@@ -448,10 +552,16 @@ void loop() {
   applyDrive(leftSpeed, rightSpeed);
 
   if (lineDetected) {
-    Serial.print("Error: ");
-    Serial.println(error);
+    if (millis() - lastStatusPrintMs >= statusPrintIntervalMs) {
+      lastStatusPrintMs = millis();
+      Serial.print("Error: ");
+      Serial.println(error);
+    }
   } else {
-    Serial.println("LINE LOST -> SEARCHING");
+    if (millis() - lastStatusPrintMs >= statusPrintIntervalMs) {
+      lastStatusPrintMs = millis();
+      Serial.println("LINE LOST -> SEARCHING");
+    }
   }
 
   delay(10);

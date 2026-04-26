@@ -22,7 +22,11 @@ class DualVL53L0X(Node):
         super().__init__('dual_vl53l0x_node')
 
         self.declare_parameter('buzzer_active_low', False)
+        self.declare_parameter('sensor_init_retries', 5)
+        self.declare_parameter('sensor_init_delay_sec', 0.5)
         self.buzzer_active_low = bool(self.get_parameter('buzzer_active_low').value)
+        self.sensor_init_retries = int(self.get_parameter('sensor_init_retries').value)
+        self.sensor_init_delay_sec = float(self.get_parameter('sensor_init_delay_sec').value)
 
         # Publishers
         self.pub1 = self.create_publisher(Float32, '/tof1/distance', 10)
@@ -48,6 +52,12 @@ class DualVL53L0X(Node):
         self._beep_state_on = False
         self._last_beep_toggle = time.monotonic()
         self.buzzer_obstacle_active = False
+        self._last_sensor_warn_time = {
+            'sensor1': 0.0,
+            'sensor2': 0.0,
+            'sensor3': 0.0,
+        }
+        self._sensor_warn_interval_sec = 2.0
 
         # Setup GPIO
         GPIO.setmode(GPIO.BCM)
@@ -66,31 +76,53 @@ class DualVL53L0X(Node):
         # Initialize I2C
         self.i2c = busio.I2C(board.SCL, board.SDA)
 
-        # --- Sensor 1 ---
-        GPIO.output(XSHUT_1, GPIO.HIGH)
-        time.sleep(0.5)
+        self.sensor1 = self._init_sensor_with_retry(XSHUT_1, 0x30, 'sensor1')
+        self.sensor2 = self._init_sensor_with_retry(XSHUT_2, 0x31, 'sensor2')
+        self.sensor3 = self._init_sensor_with_retry(XSHUT_3, 0x32, 'sensor3')
 
-        self.sensor1 = adafruit_vl53l0x.VL53L0X(self.i2c)
-        self.sensor1.set_address(0x30)
-
-        # --- Sensor 2 ---
-        GPIO.output(XSHUT_2, GPIO.HIGH)
-        time.sleep(0.5)
-
-        self.sensor2 = adafruit_vl53l0x.VL53L0X(self.i2c)
-        self.sensor2.set_address(0x31)
-
-        # # --- Sensor 3 ---
-        GPIO.output(XSHUT_3, GPIO.HIGH)
-        time.sleep(0.5)
-        
-        self.sensor3 = adafruit_vl53l0x.VL53L0X(self.i2c)
-        self.sensor3.set_address(0x32)
-
-        self.get_logger().info("Sensors initialized successfully")
+        initialized = sum(s is not None for s in [self.sensor1, self.sensor2, self.sensor3])
+        if initialized == 0:
+            self.get_logger().error('No TOF sensors initialized. Node will keep running and retry in read loop.')
+        else:
+            self.get_logger().info(f'Sensors initialized successfully: {initialized}/3')
 
         # Timer (10 Hz)
         self.timer = self.create_timer(0.1, self.read_sensors)
+
+    def _init_sensor_with_retry(self, xshut_pin: int, new_addr: int, name: str):
+        for attempt in range(1, self.sensor_init_retries + 1):
+            try:
+                GPIO.output(xshut_pin, GPIO.LOW)
+                time.sleep(self.sensor_init_delay_sec)
+                GPIO.output(xshut_pin, GPIO.HIGH)
+                time.sleep(self.sensor_init_delay_sec)
+
+                sensor = adafruit_vl53l0x.VL53L0X(self.i2c)
+                sensor.set_address(new_addr)
+                self.get_logger().info(f'{name} initialized at 0x{new_addr:02X} (attempt {attempt})')
+                return sensor
+            except Exception as exc:
+                self.get_logger().warn(
+                    f'{name} init failed (attempt {attempt}/{self.sensor_init_retries}): {exc}'
+                )
+                time.sleep(self.sensor_init_delay_sec)
+
+        self.get_logger().error(f'{name} failed to initialize after {self.sensor_init_retries} attempts')
+        return None
+
+    def _read_sensor_range(self, sensor, sensor_name: str):
+        if sensor is None:
+            return -1.0, -1
+
+        try:
+            dist = sensor.range
+            return float(dist), int(dist)
+        except Exception as exc:
+            now = time.monotonic()
+            if (now - self._last_sensor_warn_time[sensor_name]) >= self._sensor_warn_interval_sec:
+                self.get_logger().warn(f'{sensor_name} read failed: {exc}')
+                self._last_sensor_warn_time[sensor_name] = now
+            return -1.0, -1
 
     def publish_motor_command(self, command: str):
         self._ignore_next_command = command
@@ -119,26 +151,9 @@ class DualVL53L0X(Node):
         msg2 = Float32()
         msg3 = Float32()
 
-        try:
-            dist1 = self.sensor1.range  # in mm
-            msg1.data = float(dist1)
-        except:
-            msg1.data = -1.0
-            dist1 = -1
-
-        try:
-            dist2 = self.sensor2.range
-            msg2.data = float(dist2)
-        except:
-            msg2.data = -1.0
-            dist2 = -1
-
-        try:
-            dist3 = self.sensor3.range
-            msg3.data = float(dist3)
-        except:
-            msg3.data = -1.0
-            dist3 = -1
+        msg1.data, dist1 = self._read_sensor_range(self.sensor1, 'sensor1')
+        msg2.data, dist2 = self._read_sensor_range(self.sensor2, 'sensor2')
+        msg3.data, dist3 = self._read_sensor_range(self.sensor3, 'sensor3')
 
         self.pub1.publish(msg1)
         self.pub2.publish(msg2)
@@ -149,7 +164,7 @@ class DualVL53L0X(Node):
         valid_distances = [d for d in distances if d >= 0]
 
         any_below = any(d <= self.obstacle_threshold_mm for d in valid_distances)
-        all_clear = len(valid_distances) == 3 and all(d > self.obstacle_threshold_mm for d in valid_distances)
+        all_clear = len(valid_distances) >= 2 and all(d > self.obstacle_threshold_mm for d in valid_distances)
         self.buzzer_obstacle_active = any_below
 
         if not self.obstacle_active:

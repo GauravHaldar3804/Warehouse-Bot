@@ -60,6 +60,7 @@ setup(
         'motor_command_serial_bridge = agv_motor_controller.motor_command_serial_bridge:main',
         'ina219_battery_node = agv_motor_controller.ina219_battery_node:main',
         'agv_demo_topic_node = agv_motor_controller.agv_demo_topic_node:main',
+        'imu_yaw_node = agv_motor_controller.imu_yaw_node:main',
     ],
 },
 )

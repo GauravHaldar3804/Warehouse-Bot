@@ -22,4 +22,10 @@ def generate_launch_description():
             name='motor_command_serial_bridge',
             output='screen',
         ),
+        Node(
+            package='agv_motor_controller',
+            executable='imu_yaw_node',
+            name='imu_yaw_node',
+            output='screen',
+        ),
     ])
