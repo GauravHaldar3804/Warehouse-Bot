@@ -28,10 +28,20 @@ class MotorCommandSerialBridge(Node):
         self._last_encoder = None
         self._serial_rx_buffer = ''
         self._last_malformed_warn_time = 0.0
+        self._last_blocked_warn_time = 0.0
+        self.obstacle_latched = False
+
+        self.motion_commands = {
+            'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN',
+            'STRAIGHT4', 'FORWARD4', 'RIGHT6', 'SPIN360',
+            'FORWARD', 'TURN'
+        }
 
         self.allowed_commands = {
             'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN', 'STOP', 'START',
-            'OBSTACLE', 'CLEAR', 'STRAIGHT4', 'FORWARD4', 'RIGHT6', 'SPIN360'
+            'OBSTACLE', 'CLEAR', 'STRAIGHT4', 'FORWARD4', 'RIGHT6', 'SPIN360',
+            'FORWARD', 'TURN', 'PAN+', 'PAN-', 'PANCENTER',
+            'TILT+', 'TILT-', 'TILTCENTER'
         }
 
         self.subscription = self.create_subscription(
@@ -144,8 +154,27 @@ class MotorCommandSerialBridge(Node):
         if not command:
             return
 
-        if command not in self.allowed_commands:
+        is_pan_set = command.startswith('PAN=') and len(command) > 4 and command[4:].isdigit()
+        is_tilt_set = command.startswith('TILT=') and len(command) > 5 and command[5:].isdigit()
+        is_tilt_down_set = command.startswith('TILTDOWN=') and len(command) > 9 and command[9:].isdigit()
+
+        if (command not in self.allowed_commands) and (not is_pan_set) and (not is_tilt_set) and (not is_tilt_down_set):
             self.get_logger().warn(f"Ignoring unsupported motor command: '{msg.data}'")
+            return
+
+        # Keep obstacle as a hard safety latch at bridge level so transient
+        # STOP behavior in firmware cannot allow movement while obstacle exists.
+        if command == 'OBSTACLE':
+            self.obstacle_latched = True
+        elif command == 'CLEAR':
+            self.obstacle_latched = False
+        elif self.obstacle_latched and (command == 'START' or command in self.motion_commands):
+            now = self.get_clock().now().nanoseconds / 1e9
+            if (now - self._last_blocked_warn_time) >= 1.0:
+                self.get_logger().warn(
+                    f"Blocking '{command}' while obstacle latch is active; waiting for CLEAR"
+                )
+                self._last_blocked_warn_time = now
             return
 
         if not self.ser or not self.ser.is_open:

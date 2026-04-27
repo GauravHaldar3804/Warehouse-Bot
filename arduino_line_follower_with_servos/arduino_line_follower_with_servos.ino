@@ -195,9 +195,9 @@ int weights[8] = {3,2,1,0,0,-1,-2,-3};
 const uint8_t panServoChannel = 8;
 const uint8_t tiltServoChannel = 9;
 
-const int panLockDeg = 90;
-const int tiltDownDeg = 180;
-const int tiltFrontDeg = 90;
+int panCenterDeg = 90;
+int tiltDownDeg = 180;
+int tiltFrontDeg = 90;
 
 // PCA9685 pulse counts for typical servos at 50 Hz.
 const uint16_t servoPulseMin = 110;
@@ -217,7 +217,7 @@ void setServoAngle(uint8_t channel, int angleDeg) {
 
 void updateCameraServos() {
   // Pan remains locked straight ahead.
-  setServoAngle(panServoChannel, panLockDeg);
+  setServoAngle(panServoChannel, panCenterDeg);
   // Tilt looks front when obstacle exists, else looks down.
   setServoAngle(tiltServoChannel, obstacleDetected ? tiltFrontDeg : tiltDownDeg);
 }
@@ -283,14 +283,15 @@ void checkCommand() {
     cmd.toUpperCase();
 
     if (cmd == "STOP") {
-      obstacleDetected = true;
-      updateCameraServos();
-      isRunning = false;
+      // Soft stop: hold motors without forcing obstacle camera tilt.
+      // This keeps START gate state unchanged and allows next motion command.
       controlMode = MODE_MANUAL;
       manualCommand = CMD_NONE;
       manualCommandDurationMs = 0;
+      manualTurnStartMs = 0;
+      manualStopBeforeTurnActive = false;
       stopMotors();
-      Serial.println("STOPPED");
+      Serial.println("MOTORS STOPPED (HOLD)");
       return;
     }
 
@@ -332,6 +333,89 @@ void checkCommand() {
       encLBCount = 0;
       encLFCount = 0;
       Serial.println("ENCODERS RESET");
+      return;
+    }
+
+    // Pan servo calibration from laptop:
+    //   PAN=95   -> set exact center angle
+    //   PAN+     -> +2 deg
+    //   PAN-     -> -2 deg
+    //   PANCENTER -> reset to 90 deg
+    if (cmd.startsWith("PAN=")) {
+      int angle = cmd.substring(4).toInt();
+      panCenterDeg = constrain(angle, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PAN+") {
+      panCenterDeg = constrain(panCenterDeg + 2, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PAN-") {
+      panCenterDeg = constrain(panCenterDeg - 2, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PANCENTER") {
+      panCenterDeg = 90;
+      updateCameraServos();
+      Serial.println("PAN CENTER RESET: 90");
+      return;
+    }
+
+    // Tilt servo calibration from laptop:
+    //   TILT=95       -> set front-looking tilt angle
+    //   TILT+ / TILT- -> nudge front-looking angle by 2 deg
+    //   TILTCENTER    -> reset front-looking angle to 90 deg
+    //   TILTDOWN=170  -> set down-looking angle
+    if (cmd.startsWith("TILT=")) {
+      int angle = cmd.substring(5).toInt();
+      tiltFrontDeg = constrain(angle, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILT+") {
+      tiltFrontDeg = constrain(tiltFrontDeg + 2, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILT-") {
+      tiltFrontDeg = constrain(tiltFrontDeg - 2, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILTCENTER") {
+      tiltFrontDeg = 90;
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.println("TILT FRONT RESET: 90");
+      return;
+    }
+
+    if (cmd.startsWith("TILTDOWN=")) {
+      int angle = cmd.substring(9).toInt();
+      tiltDownDeg = constrain(angle, 0, 180);
+      updateCameraServos();
+      Serial.print("TILT DOWN SET: ");
+      Serial.println(tiltDownDeg);
       return;
     }
 
