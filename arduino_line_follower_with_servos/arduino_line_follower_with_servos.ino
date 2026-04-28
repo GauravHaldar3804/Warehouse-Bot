@@ -18,7 +18,7 @@ const int searchFastSpeed = 255;
 const int searchSlowSpeed = -255;
 
 // ================= SPEED =================
-int baseSpeed = 150;
+int baseSpeed = 100;
 
 // ================= RUN CONTROL =================
 bool isRunning = false;
