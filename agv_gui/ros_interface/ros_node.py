@@ -51,16 +51,14 @@ class DashboardRosNode(Node):
 		)
 
 		self.create_subscription(BatteryState, 'battery_state', self._on_battery_state, 10)
-		self.create_subscription(String, 'camera/qr_code', self._on_qr_code, self._camera_qos)
-		self.create_subscription(BatteryState, 'battery_state', self._on_battery_state, 10)
 		self.create_subscription(String, 'battery_metrics', self._on_battery_metrics, 10)
 		self.create_subscription(String, 'camera/qr_code', self._on_qr_code, self._camera_qos)
-		self.path_query_publisher = self.create_publisher(String, 'path_query', 10)
-		self.motor_command_publisher = self.create_publisher(String, 'motor_command', 10)
-
 		self.create_subscription(String, 'path_result', self._on_path_result, 10)
 		self.create_subscription(String, 'motor_command', self._on_motor_command, 10)
 		self.create_subscription(Bool, '/tof/obstacle_detected', self._on_obstacle, 10)
+		
+		self.path_query_publisher = self.create_publisher(String, 'path_query', 10)
+		self.motor_command_publisher = self.create_publisher(String, 'motor_command', 10)
 
 		self.get_logger().info('AGV dashboard ROS bridge started')
 
