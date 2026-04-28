@@ -13,26 +13,21 @@ class AGVStatusPage(QWidget):
 
         self.main_window = main_window
         self.ros_node = ros_node
-        self.setStyleSheet("background-color:#eef2f5;")
+        self.setStyleSheet("background-color:#f5f7fb; color:#111827; font-family:Segoe UI, Arial, sans-serif;")
 
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(18)
 
         # ---------------- HEADER ----------------
         header = QHBoxLayout()
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFixedWidth(90)
-        back_btn.setStyleSheet("""
-        QPushButton{
-            background-color:#3498db;
-            color:white;
-            border-radius:6px;
-            padding:5px;
-        }
-        QPushButton:hover{
-            background-color:#2980b9;
-        }
-        """)
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedSize(100, 35)
+        back_btn.setStyleSheet(
+            'QPushButton{background-color:#3498db; color:white; border-radius:8px; font-weight:bold;}'
+            'QPushButton:hover{background-color:#2980b9;}'
+        )
         back_btn.clicked.connect(self.main_window.show_home)
 
         title = QLabel("AGV Status")
@@ -52,9 +47,9 @@ class AGVStatusPage(QWidget):
         grid = QGridLayout()
         grid.setSpacing(20)
 
-        self.connection = self.create_card("Connection", "Waiting for ROS", "#2ecc71")
-        self.battery = self.create_card("Battery", "--", "#27ae60")
-        self.position = self.create_card("Position", "HOME-1", "#34495e")
+        self.connection = self.create_card("Connection", "Waiting for ROS", "#8b5cf6")
+        self.battery = self.create_card("Battery", "--", "#2563eb")
+        self.position = self.create_card("Position", "HOME-1", "#111827")
         self.target = self.create_card("Target", "--", "#8e44ad")
         self.state = self.create_card("State", "Waiting for mission", "#f39c12")
         self.last_command = self.create_card("Last Command", "NONE", "#9b59b6")
@@ -97,9 +92,9 @@ class AGVStatusPage(QWidget):
         card.setStyleSheet(f"""
         QFrame{{
             background:white;
-            border-left:6px solid {color};
-            border-radius:10px;
-            padding:15px;
+            border:1px solid #e5e7eb;
+            border-radius:18px;
+            padding:18px;
         }}
         """)
 

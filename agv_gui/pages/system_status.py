@@ -14,26 +14,21 @@ class SystemStatusPage(QWidget):
 
         self.main_window = main_window
         self.ros_node = ros_node
-        self.setStyleSheet("background-color:#eef2f5;")
+        self.setStyleSheet("background-color:#f5f7fb; color:#111827; font-family:Segoe UI, Arial, sans-serif;")
 
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(18)
 
         # HEADER
         header = QHBoxLayout()
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFixedWidth(90)
-        back_btn.setStyleSheet("""
-        QPushButton{
-            background-color:#3498db;
-            color:white;
-            border-radius:6px;
-            padding:5px;
-        }
-        QPushButton:hover{
-            background-color:#2980b9;
-        }
-        """)
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedSize(100, 35)
+        back_btn.setStyleSheet(
+            'QPushButton{background-color:#3498db; color:white; border-radius:8px; font-weight:bold;}'
+            'QPushButton:hover{background-color:#2980b9;}'
+        )
         back_btn.clicked.connect(self.main_window.show_home)
 
         title = QLabel("System Status")
