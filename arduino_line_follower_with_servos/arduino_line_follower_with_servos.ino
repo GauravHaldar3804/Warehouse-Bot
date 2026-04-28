@@ -18,7 +18,7 @@ const int searchFastSpeed = 255;
 const int searchSlowSpeed = -255;
 
 // ================= SPEED =================
-int baseSpeed = 180;
+int baseSpeed = 150;
 
 // ================= RUN CONTROL =================
 bool isRunning = false;
@@ -42,12 +42,17 @@ enum ManualCommand {
 ManualCommand manualCommand = CMD_NONE;
 
 const int manualStraightSpeed = 150;
-const int manualTurnSpeed = 170;
+const int manualTurnSpeed = 255;
 const unsigned long leftRightTurnDurationMs = 2000;
+const unsigned long goalForwardDurationMs = 4000;
+const unsigned long goalSpinDurationMs = 6000;
 const unsigned long uturnDurationMs = 4000;
+const unsigned long stopBeforeTurnDurationMs = 250;
 
 unsigned long manualCommandStartMs = 0;
 unsigned long manualCommandDurationMs = 0;
+unsigned long manualTurnStartMs = 0;
+bool manualStopBeforeTurnActive = false;
 
 // ================= ENCODERS (QUADRATURE) =================
 const uint8_t encRFPinA = 2;
@@ -123,11 +128,13 @@ void publishEncodersIfDue() {
   Serial.println(encLFCount);
 }
 
-void startTimedManualCommand(ManualCommand cmd, unsigned long durationMs) {
+void startTimedManualCommand(ManualCommand cmd, unsigned long durationMs, bool stopBeforeTurn = true) {
   controlMode = MODE_MANUAL;
   manualCommand = cmd;
   manualCommandStartMs = millis();
   manualCommandDurationMs = durationMs;
+  manualTurnStartMs = 0;
+  manualStopBeforeTurnActive = (cmd == CMD_LEFT || cmd == CMD_RIGHT || cmd == CMD_UTURN) && stopBeforeTurn;
 }
 
 void applyDrive(int leftSpeed, int rightSpeed) {
@@ -141,6 +148,16 @@ void applyDrive(int leftSpeed, int rightSpeed) {
 }
 
 void applyManualCommand() {
+  if (manualStopBeforeTurnActive) {
+    stopMotors();
+    if ((millis() - manualCommandStartMs) >= stopBeforeTurnDurationMs) {
+      manualStopBeforeTurnActive = false;
+      manualTurnStartMs = millis();
+      Serial.println("TURN START (IN-PLACE)");
+    }
+    return;
+  }
+
   switch (manualCommand) {
     case CMD_STRAIGHT:
       applyDrive(manualStraightSpeed, manualStraightSpeed);
@@ -178,9 +195,9 @@ int weights[8] = {3,2,1,0,0,-1,-2,-3};
 const uint8_t panServoChannel = 8;
 const uint8_t tiltServoChannel = 9;
 
-const int panLockDeg = 90;
-const int tiltDownDeg = 0;
-const int tiltFrontDeg = 90;
+int panCenterDeg = 90;
+int tiltDownDeg = 180;
+int tiltFrontDeg = 90;
 
 // PCA9685 pulse counts for typical servos at 50 Hz.
 const uint16_t servoPulseMin = 110;
@@ -200,7 +217,7 @@ void setServoAngle(uint8_t channel, int angleDeg) {
 
 void updateCameraServos() {
   // Pan remains locked straight ahead.
-  setServoAngle(panServoChannel, panLockDeg);
+  setServoAngle(panServoChannel, panCenterDeg);
   // Tilt looks front when obstacle exists, else looks down.
   setServoAngle(tiltServoChannel, obstacleDetected ? tiltFrontDeg : tiltDownDeg);
 }
@@ -266,14 +283,15 @@ void checkCommand() {
     cmd.toUpperCase();
 
     if (cmd == "STOP") {
-      obstacleDetected = true;
-      updateCameraServos();
-      isRunning = false;
+      // Soft stop: hold motors without forcing obstacle camera tilt.
+      // This keeps START gate state unchanged and allows next motion command.
       controlMode = MODE_MANUAL;
       manualCommand = CMD_NONE;
       manualCommandDurationMs = 0;
+      manualTurnStartMs = 0;
+      manualStopBeforeTurnActive = false;
       stopMotors();
-      Serial.println("STOPPED");
+      Serial.println("MOTORS STOPPED (HOLD)");
       return;
     }
 
@@ -318,6 +336,89 @@ void checkCommand() {
       return;
     }
 
+    // Pan servo calibration from laptop:
+    //   PAN=95   -> set exact center angle
+    //   PAN+     -> +2 deg
+    //   PAN-     -> -2 deg
+    //   PANCENTER -> reset to 90 deg
+    if (cmd.startsWith("PAN=")) {
+      int angle = cmd.substring(4).toInt();
+      panCenterDeg = constrain(angle, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PAN+") {
+      panCenterDeg = constrain(panCenterDeg + 2, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PAN-") {
+      panCenterDeg = constrain(panCenterDeg - 2, 0, 180);
+      updateCameraServos();
+      Serial.print("PAN CENTER SET: ");
+      Serial.println(panCenterDeg);
+      return;
+    }
+
+    if (cmd == "PANCENTER") {
+      panCenterDeg = 90;
+      updateCameraServos();
+      Serial.println("PAN CENTER RESET: 90");
+      return;
+    }
+
+    // Tilt servo calibration from laptop:
+    //   TILT=95       -> set front-looking tilt angle
+    //   TILT+ / TILT- -> nudge front-looking angle by 2 deg
+    //   TILTCENTER    -> reset front-looking angle to 90 deg
+    //   TILTDOWN=170  -> set down-looking angle
+    if (cmd.startsWith("TILT=")) {
+      int angle = cmd.substring(5).toInt();
+      tiltFrontDeg = constrain(angle, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILT+") {
+      tiltFrontDeg = constrain(tiltFrontDeg + 2, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILT-") {
+      tiltFrontDeg = constrain(tiltFrontDeg - 2, 0, 180);
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.print("TILT FRONT SET: ");
+      Serial.println(tiltFrontDeg);
+      return;
+    }
+
+    if (cmd == "TILTCENTER") {
+      tiltFrontDeg = 90;
+      setServoAngle(tiltServoChannel, tiltFrontDeg);
+      Serial.println("TILT FRONT RESET: 90");
+      return;
+    }
+
+    if (cmd.startsWith("TILTDOWN=")) {
+      int angle = cmd.substring(9).toInt();
+      tiltDownDeg = constrain(angle, 0, 180);
+      updateCameraServos();
+      Serial.print("TILT DOWN SET: ");
+      Serial.println(tiltDownDeg);
+      return;
+    }
+
     // Strict START/STOP gate: ignore motion commands until START is received.
     if (!isRunning) {
       Serial.println("IGNORED (STOPPED): send START first");
@@ -326,31 +427,44 @@ void checkCommand() {
 
     if (cmd == "STRAIGHT" || cmd == "FORWARD") {
       isRunning = true;
-      controlMode = MODE_AUTO;
-      manualCommand = CMD_NONE;
-      manualCommandDurationMs = 0;
-      Serial.println("MANUAL STRAIGHT");
+      startTimedManualCommand(CMD_STRAIGHT, leftRightTurnDurationMs);
+      Serial.println("MANUAL STRAIGHT (2s)");
+      return;
+    }
+
+    if (cmd == "STRAIGHT4" || cmd == "FORWARD4") {
+      isRunning = true;
+      startTimedManualCommand(CMD_STRAIGHT, goalForwardDurationMs);
+      Serial.println("MANUAL STRAIGHT (4s)");
       return;
     }
 
     if (cmd == "LEFT") {
       isRunning = true;
       startTimedManualCommand(CMD_LEFT, leftRightTurnDurationMs);
-      Serial.println("MANUAL LEFT");
+      Serial.println("MANUAL LEFT (STOP->TURN)");
       return;
     }
 
     if (cmd == "RIGHT" || cmd == "TURN") {
       isRunning = true;
       startTimedManualCommand(CMD_RIGHT, leftRightTurnDurationMs);
-      Serial.println("MANUAL RIGHT");
+      Serial.println("MANUAL RIGHT (STOP->TURN)");
+      return;
+    }
+
+    if (cmd == "RIGHT6" || cmd == "SPIN360") {
+      isRunning = true;
+      // Goal spin must be continuous at full speed; skip stop-before-turn.
+      startTimedManualCommand(CMD_RIGHT, goalSpinDurationMs, false);
+      Serial.println("MANUAL RIGHT (6s CONTINUOUS)");
       return;
     }
 
     if (cmd == "UTURN") {
       isRunning = true;
       startTimedManualCommand(CMD_UTURN, uturnDurationMs);
-      Serial.println("MANUAL UTURN");
+      Serial.println("MANUAL UTURN (STOP->TURN)");
       return;
     }
   }
@@ -500,13 +614,24 @@ void loop() {
   if (controlMode == MODE_MANUAL) {
     applyManualCommand();
 
+    unsigned long manualElapsedMs = 0;
+    if (manualCommand == CMD_LEFT || manualCommand == CMD_RIGHT || manualCommand == CMD_UTURN) {
+      if (manualTurnStartMs > 0 && !manualStopBeforeTurnActive) {
+        manualElapsedMs = millis() - manualTurnStartMs;
+      }
+    } else {
+      manualElapsedMs = millis() - manualCommandStartMs;
+    }
+
     if (
       manualCommandDurationMs > 0 &&
-      (millis() - manualCommandStartMs) >= manualCommandDurationMs
+      manualElapsedMs >= manualCommandDurationMs
     ) {
       controlMode = MODE_AUTO;
       manualCommand = CMD_NONE;
       manualCommandDurationMs = 0;
+      manualTurnStartMs = 0;
+      manualStopBeforeTurnActive = false;
       Serial.println("MANUAL TURN DONE -> AUTO MODE");
     }
 

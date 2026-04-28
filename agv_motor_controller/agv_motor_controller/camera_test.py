@@ -44,6 +44,7 @@ class CameraNode(Node):
         self.qr_code_publisher = self.create_publisher(String, 'camera/qr_code', qos_profile)
         self.intersection_publisher = self.create_publisher(String, 'camera/intersection', 10)
         self.motor_command_publisher = self.create_publisher(String, 'motor_command', 10)
+        self.path_query_publisher = self.create_publisher(String, 'path_query', 10)
 
         # Subscriber
         self.path_subscription = self.create_subscription(
@@ -61,6 +62,18 @@ class CameraNode(Node):
         self.last_node_event_time = 0.0
         self.node_event_cooldown_sec = 1.0
         self.same_node_wrong_grace_sec = 10.0
+        self.intersection_straight_sec = 2.0
+        self.pre_turn_stop_sec = 0.25
+        self.delayed_commands = []
+        self.goal_forward_sec = 4.0
+        self.goal_spin_sec = 6.0
+        self.goal_sequence_active = False
+        self.wrong_node_stop_sec = 1.0
+        self.replan_cooldown_sec = 2.0
+        self.current_goal_node = ''
+        self.replan_in_progress = False
+        self.last_replan_request_time = 0.0
+        self.mission_active = False
 
         # Heading estimation config
         self.declare_parameter('agv_heading_offset_deg', 0.0)
@@ -119,6 +132,7 @@ class CameraNode(Node):
         try:
             result = json.loads(msg.data)
             if result.get('status') == 'success':
+                self.replan_in_progress = False
                 new_path_nodes = result.get('path', [])
                 new_navigation_actions = [item.get('action', '').upper() for item in result.get('navigation', [])]
                 new_signature = '|'.join(new_path_nodes) + '||' + '|'.join(new_navigation_actions)
@@ -128,6 +142,8 @@ class CameraNode(Node):
 
                 self.path_nodes = new_path_nodes
                 self.navigation_actions = new_navigation_actions
+                parsed_goal = str(result.get('goal', '')).upper()
+                self.current_goal_node = parsed_goal if parsed_goal else (self.path_nodes[-1] if self.path_nodes else '')
                 self.current_node_index = 0
                 self.visited_nodes = []
                 if len(self.path_nodes) > 1:
@@ -137,18 +153,57 @@ class CameraNode(Node):
                     self.pending_expected_heading = 'DONE'
                 self.pending_command = None
                 self.pending_command_source_heading = None
+                self.delayed_commands = []
+                self.goal_sequence_active = False
                 self.get_logger().info(f"🗺️  PATH RECEIVED: {' → '.join(self.path_nodes)}")
                 self.get_logger().info(f"Total nodes: {len(self.path_nodes)}")
                 if self.navigation_actions:
                     self.get_logger().info(f"Planner actions: {' | '.join(self.navigation_actions)}")
 
-                # Trigger motion only for a newly received mission path.
-                if is_new_path:
+                # Trigger motion for new paths, or when previous mission has completed/stopped.
+                if is_new_path or not self.mission_active:
                     self.publish_motor_command("START")
+                    self.mission_active = True
                 else:
                     self.get_logger().info("Path unchanged, not re-sending START")
+            elif result.get('status') == 'error':
+                self.replan_in_progress = False
+                self.get_logger().error(f"Planner returned error: {result.get('message', 'unknown error')}")
         except Exception as e:
             self.get_logger().error(f"Path parse error: {e}")
+
+    def request_replan_from_node(self, detected_qr):
+        now = time.time()
+        if (now - self.last_replan_request_time) < self.replan_cooldown_sec:
+            return
+
+        if not self.current_goal_node:
+            self.get_logger().warn("Cannot request replan: current goal is unknown")
+            return
+
+        self.delayed_commands = []
+        self.goal_sequence_active = False
+        self.publish_motor_command("STOP")
+        self.mission_active = False
+        time.sleep(self.wrong_node_stop_sec)
+
+        query = {
+            'start': detected_qr,
+            'goal': self.current_goal_node,
+        }
+        msg = String()
+        msg.data = json.dumps(query)
+        self.path_query_publisher.publish(msg)
+
+        self.replan_in_progress = True
+        self.last_replan_request_time = now
+        self.pending_command = None
+        self.pending_command_source_heading = None
+        self.pending_expected_heading = "UNKNOWN"
+
+        self.get_logger().warn(
+            f"Requested replan from {detected_qr} to {self.current_goal_node} after wrong-node stop"
+        )
 
     def receive_frames(self):
         MARKER = 0xDEADBEEF
@@ -321,6 +376,88 @@ class CameraNode(Node):
         print(f"MOTOR_COMMAND_SENT: {direction}", flush=True)
         self.get_logger().info(f"🎯 MOTOR COMMAND: {direction}")
 
+    def queue_delayed_command(self, command, execute_time, source_heading=None):
+        self.delayed_commands.append({
+            "command": command,
+            "execute_time": execute_time,
+            "source_heading": source_heading,
+        })
+        self.delayed_commands.sort(key=lambda item: item["execute_time"])
+
+    def flush_delayed_action(self):
+        now = time.time()
+        while self.delayed_commands and now >= self.delayed_commands[0]["execute_time"]:
+            item = self.delayed_commands.pop(0)
+            action = item["command"]
+            source_heading = item["source_heading"]
+
+            self.publish_motor_command(action)
+
+            if action in ["LEFT", "RIGHT", "UTURN", "STRAIGHT"]:
+                self.pending_command = action
+                self.pending_command_source_heading = source_heading
+                exp = self.apply_relative_command_to_heading(source_heading, action) if source_heading else None
+                self.pending_expected_heading = exp if exp else "UNKNOWN"
+            elif action == "STOP" and self.current_node_index >= len(self.path_nodes):
+                self.goal_sequence_active = False
+                self.mission_active = False
+                self.pending_command = None
+                self.pending_command_source_heading = None
+                self.pending_expected_heading = "DONE"
+
+            self.get_logger().info(f"Delayed action executed: {action}")
+
+    def start_goal_completion_sequence(self, current_heading):
+        """After reaching goal: move forward, then spin in place, then stop."""
+        self.delayed_commands = []
+        self.goal_sequence_active = True
+
+        now = time.time()
+        self.publish_motor_command("STRAIGHT4")
+        self.pending_command = "STRAIGHT"
+        self.pending_command_source_heading = current_heading
+        self.pending_expected_heading = current_heading if current_heading else "UNKNOWN"
+
+        self.queue_delayed_command("RIGHT6", now + self.goal_forward_sec, current_heading)
+
+        self.queue_delayed_command("STOP", now + self.goal_forward_sec + self.goal_spin_sec, current_heading)
+        self.get_logger().info(
+            f"Goal sequence: STRAIGHT {self.goal_forward_sec:.1f}s then in-place RIGHT6 spin {self.goal_spin_sec:.1f}s"
+        )
+
+    def publish_navigation_action(self, planner_action, current_heading):
+        """
+        At each detected node, force STRAIGHT briefly, then STOP, then turn.
+        This avoids curved turning and enforces in-place turns for mecanum wheels.
+        """
+        if planner_action in ["LEFT", "RIGHT", "STRAIGHT"]:
+            self.publish_motor_command("STRAIGHT")
+            self.pending_command = "STRAIGHT"
+            self.pending_command_source_heading = current_heading
+            self.pending_expected_heading = current_heading if current_heading else "UNKNOWN"
+            self.delayed_commands = []
+
+            if planner_action in ["LEFT", "RIGHT"]:
+                now = time.time()
+                self.queue_delayed_command("STOP", now + self.intersection_straight_sec, current_heading)
+                self.queue_delayed_command(
+                    planner_action,
+                    now + self.intersection_straight_sec + self.pre_turn_stop_sec,
+                    current_heading,
+                )
+                self.get_logger().info(
+                    f"Node detected: STRAIGHT {self.intersection_straight_sec:.1f}s, STOP {self.pre_turn_stop_sec:.2f}s, then {planner_action}"
+                )
+        elif planner_action == "UTURN":
+            self.delayed_commands = []
+            self.publish_motor_command("STOP")
+            time.sleep(self.pre_turn_stop_sec)
+            self.publish_motor_command("UTURN")
+            self.pending_command = "UTURN"
+            self.pending_command_source_heading = current_heading
+            exp = self.apply_relative_command_to_heading(current_heading, "UTURN") if current_heading else None
+            self.pending_expected_heading = exp if exp else "UNKNOWN"
+
     def send_shutdown_stop_once(self, reason='shutdown'):
         if self._shutdown_stop_sent:
             return
@@ -404,6 +541,7 @@ class CameraNode(Node):
 
     def process_frame(self, frame_data):
         self.command_sent_this_frame = False
+        self.flush_delayed_action()
 
         frame = np.frombuffer(frame_data, dtype=np.uint8)
         img = cv2.imdecode(frame, cv2.IMREAD_COLOR)
@@ -546,6 +684,12 @@ class CameraNode(Node):
         Handle detection of a node (intersection + QR code).
         Verify it matches expected node and update path progress.
         """
+        if self.goal_sequence_active:
+            return
+
+        if self.replan_in_progress:
+            return
+
         now = time.time()
         if now - self.last_node_event_time < self.node_event_cooldown_sec:
             return
@@ -594,17 +738,16 @@ class CameraNode(Node):
                     planner_action = self.navigation_actions[self.current_node_index]
 
                 if planner_action in ["LEFT", "RIGHT", "STRAIGHT", "UTURN"]:
-                    self.publish_motor_command(planner_action)
-                    self.pending_command = planner_action
-                    self.pending_command_source_heading = current_heading
-                    exp = self.apply_relative_command_to_heading(current_heading, planner_action) if current_heading else None
-                    self.pending_expected_heading = exp if exp else "UNKNOWN"
+                    self.publish_navigation_action(planner_action, current_heading)
                 elif planner_action == "START":
                     self.pending_command = None
                     self.pending_command_source_heading = None
                     self.pending_expected_heading = "UNKNOWN"
                 elif planner_action == "STOP":
+                    self.delayed_commands = []
+                    self.goal_sequence_active = False
                     self.publish_motor_command("STOP")
+                    self.mission_active = False
                     self.pending_command = None
                     self.pending_command_source_heading = None
                     self.pending_expected_heading = "DONE"
@@ -615,11 +758,26 @@ class CameraNode(Node):
                 self.get_logger().info(f"➡️  Next target: {next_node}")
             else:
                 self.get_logger().info("🎉 DESTINATION REACHED!")
-                self.publish_motor_command("STOP")
-                self.pending_command = None
-                self.pending_command_source_heading = None
-                self.pending_expected_heading = "DONE"
+                self.current_node_index = len(self.path_nodes)
+                self.start_goal_completion_sequence(current_heading)
         else:
+            # If we detect a valid future path node, resync instead of marking WRONG.
+            future_index = -1
+            for idx in range(self.current_node_index + 1, len(self.path_nodes)):
+                if self.path_nodes[idx] == detected_qr:
+                    future_index = idx
+                    break
+
+            if future_index != -1:
+                missed_nodes = self.path_nodes[self.current_node_index:future_index]
+                self.get_logger().warn(
+                    f"⏭️ Missed node(s): {' -> '.join(missed_nodes)}; resyncing at {detected_qr}"
+                )
+                self.current_node_index = future_index
+                self.last_node_event_time = 0.0
+                self.handle_node_detection(detected_qr, detected_qr_angle)
+                return
+
             # If camera still sees the previously confirmed node, allow a grace
             # period before flagging it as wrong to avoid immediate false alarms.
             last_confirmed_node = self.visited_nodes[-1] if self.visited_nodes else None
@@ -634,6 +792,7 @@ class CameraNode(Node):
 
             # ❌ WRONG NODE DETECTED
             self.get_logger().warn(f"❌ WRONG NODE! Expected {expected_node}, but detected {detected_qr}")
+            self.request_replan_from_node(detected_qr)
 
     def calculate_orientation(self, pts):
         pt1 = pts[0]

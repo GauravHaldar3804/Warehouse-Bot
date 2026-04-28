@@ -45,6 +45,13 @@ class DualVL53L0X(Node):
         self.running_assumed = False
         self.resume_needed = False
         self._ignore_next_command = None
+        self.stop_candidate_since = None
+        self.stop_confirm_delay_sec = 0.7
+        self.motion_commands = {
+            'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN',
+            'STRAIGHT4', 'FORWARD4', 'RIGHT6', 'SPIN360',
+            'FORWARD', 'TURN'
+        }
 
         # Buzzer pattern: beep while obstacle is active.
         self.beep_on_seconds = 0.2
@@ -143,8 +150,13 @@ class DualVL53L0X(Node):
 
         if command == 'START':
             self.running_assumed = True
+            self.stop_candidate_since = None
         elif command == 'STOP':
-            self.running_assumed = False
+            # STOP can be a brief pre-turn hold. Confirm only if it persists.
+            self.stop_candidate_since = time.monotonic()
+        elif command in self.motion_commands:
+            self.running_assumed = True
+            self.stop_candidate_since = None
 
     def read_sensors(self):
         msg1 = Float32()
@@ -160,6 +172,13 @@ class DualVL53L0X(Node):
         self.pub3.publish(msg3)
 
         now = time.monotonic()
+
+        # Convert persistent STOP (without follow-up motion) into not-running state.
+        if self.stop_candidate_since is not None:
+            if (now - self.stop_candidate_since) >= self.stop_confirm_delay_sec:
+                self.running_assumed = False
+                self.stop_candidate_since = None
+
         distances = [dist1, dist2, dist3]
         valid_distances = [d for d in distances if d >= 0]
 
