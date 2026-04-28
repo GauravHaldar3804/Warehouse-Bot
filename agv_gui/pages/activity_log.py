@@ -9,10 +9,11 @@ from datetime import datetime
 
 class ActivityLogPage(QWidget):
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, ros_node=None):
         super().__init__()
 
         self.main_window = main_window
+        self.ros_node = ros_node
         self.setStyleSheet("background-color:#eef2f5;")
 
         main_layout = QVBoxLayout()

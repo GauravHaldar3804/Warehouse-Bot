@@ -25,11 +25,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stack)
 
         self.home = HomePage(self)
-        self.task = TaskPage(self)
+        self.task = TaskPage(self, self.ros_node)
         self.agv_status = AGVStatusPage(self, self.ros_node)
-        self.system_status = SystemStatusPage(self)
-        self.activity_log = ActivityLogPage(self)
-        self.map_page = WarehouseMapPage(self)
+        self.system_status = SystemStatusPage(self, self.ros_node)
+        self.activity_log = ActivityLogPage(self, self.ros_node)
+        self.map_page = WarehouseMapPage(self, self.ros_node)
 
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.task)
@@ -37,6 +37,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.system_status)
         self.stack.addWidget(self.activity_log)
         self.stack.addWidget(self.map_page)
+
+        self.ros_node.activity_log = self.activity_log
+        self.show_home()
 
     def show_home(self):
         self.stack.setCurrentIndex(0)

@@ -9,10 +9,11 @@ import random
 
 class SystemStatusPage(QWidget):
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, ros_node=None):
         super().__init__()
 
         self.main_window = main_window
+        self.ros_node = ros_node
         self.setStyleSheet("background-color:#eef2f5;")
 
         main_layout = QVBoxLayout()
@@ -52,11 +53,12 @@ class SystemStatusPage(QWidget):
         grid.setSpacing(20)
 
         self.controller = self.create_card("Controller","Connected","#2ecc71")
-        self.motor = self.create_card("Motor Driver","OK","#27ae60")
-        self.encoders = self.create_card("Encoders","OK","#27ae60")
-        self.imu = self.create_card("IMU","OK","#3498db")
-        self.tof = self.create_card("ToF Sensors","Active","#9b59b6")
-        self.camera = self.create_card("Camera","Streaming","#e67e22")
+        self.motor = self.create_card("Motor Driver","Unknown","#27ae60")
+        self.encoders = self.create_card("Encoders","Unknown","#27ae60")
+        self.imu = self.create_card("IMU","Unknown","#3498db")
+        self.tof = self.create_card("ToF Sensors","Unknown","#9b59b6")
+        self.camera = self.create_card("Camera","Unknown","#e67e22")
+        self.battery_sensor = self.create_card("Battery Sensor","Unknown","#f39c12")
         self.ros = self.create_card("ROS Node","Running","#f39c12")
 
         grid.addWidget(self.controller,0,0)
@@ -67,6 +69,7 @@ class SystemStatusPage(QWidget):
         grid.addWidget(self.tof,1,1)
         grid.addWidget(self.camera,1,2)
 
+        grid.addWidget(self.battery_sensor,2,0)
         grid.addWidget(self.ros,2,1)
 
         main_layout.addLayout(grid)
@@ -111,12 +114,39 @@ class SystemStatusPage(QWidget):
 
         return card
 
-    # SIMULATE STATUS CHANGES
+    # UPDATE STATUS FROM ROS
     def update_status(self):
+        if self.ros_node is None:
+            return
 
-        states = ["OK","Active","Running","Connected"]
+        status = self.ros_node.get_status_snapshot()
 
-        self.motor.value_label.setText(random.choice(states))
-        self.encoders.value_label.setText(random.choice(states))
-        self.imu.value_label.setText(random.choice(states))
-        self.tof.value_label.setText(random.choice(states))
+        # Update component statuses based on ROS activity
+        motor_status = status.get('system_motor', 'Unknown')
+        self.motor.value_label.setText(motor_status)
+        self.set_card_color(self.motor, motor_status)
+
+        tof_status = status.get('system_tof', 'Unknown')
+        self.tof.value_label.setText(tof_status)
+        self.set_card_color(self.tof, tof_status)
+
+        camera_status = status.get('system_camera', 'Unknown')
+        self.camera.value_label.setText(camera_status)
+        self.set_card_color(self.camera, camera_status)
+
+        battery_status = status.get('system_battery', 'Unknown')
+        self.battery_sensor.value_label.setText(battery_status)
+        self.set_card_color(self.battery_sensor, battery_status)
+
+        # Keep others as Unknown for now (no ROS topics)
+        self.encoders.value_label.setText("Unknown")
+        self.imu.value_label.setText("Unknown")
+
+    # SET CARD COLOR BASED ON STATUS
+    def set_card_color(self, card, status):
+        if status == 'Active':
+            card.value_label.setStyleSheet('color:green')
+        elif status == 'Inactive':
+            card.value_label.setStyleSheet('color:red')
+        else:
+            card.value_label.setStyleSheet('color:#2c3e50')

@@ -57,6 +57,12 @@ class AGVStatusPage(QWidget):
         self.position = self.create_card("Position", "HOME-1", "#34495e")
         self.target = self.create_card("Target", "--", "#8e44ad")
         self.state = self.create_card("State", "Waiting for mission", "#f39c12")
+        self.last_command = self.create_card("Last Command", "NONE", "#9b59b6")
+        self.update_age = self.create_card("Update Age", "--", "#e67e22")
+        self.obstacle = self.create_card("Obstacle", "Clear", "#16a085")
+        self.battery_voltage = self.create_card("Battery Voltage", "--", "#f1c40f")
+        self.battery_current = self.create_card("Battery Current", "--", "#e74c3c")
+        self.mission_progress = self.create_card("Mission Progress", "--", "#3498db")
 
         grid.addWidget(self.connection,0,0)
         grid.addWidget(self.battery,0,1)
@@ -64,6 +70,14 @@ class AGVStatusPage(QWidget):
 
         grid.addWidget(self.target,1,0)
         grid.addWidget(self.state,1,1)
+        grid.addWidget(self.last_command,1,2)
+
+        grid.addWidget(self.update_age,2,0)
+        grid.addWidget(self.obstacle,2,1)
+        grid.addWidget(self.battery_voltage,2,2)
+
+        grid.addWidget(self.battery_current,3,0)
+        grid.addWidget(self.mission_progress,3,1)
 
         main_layout.addLayout(grid)
 
@@ -138,3 +152,31 @@ class AGVStatusPage(QWidget):
         self.position.value_label.setText(status.get('position', '--'))
         self.target.value_label.setText(status.get('target', '--'))
         self.state.value_label.setText(status.get('state', 'Unknown'))
+        self.last_command.value_label.setText(status.get('last_motor_command', 'NONE'))
+
+        age_sec = status.get('last_update_age_sec')
+        if age_sec is not None:
+            if age_sec > 10:
+                self.update_age.value_label.setText(f"{age_sec:.1f}s (STALE)")
+                self.update_age.value_label.setStyleSheet('color:red')
+            elif age_sec > 5:
+                self.update_age.value_label.setText(f"{age_sec:.1f}s")
+                self.update_age.value_label.setStyleSheet('color:#f39c12')
+            else:
+                self.update_age.value_label.setText(f"{age_sec:.1f}s")
+                self.update_age.value_label.setStyleSheet('color:green')
+        else:
+            self.update_age.value_label.setText('--')
+            self.update_age.value_label.setStyleSheet('color:#2c3e50')
+
+        obstacle = status.get('obstacle_detected', False)
+        if obstacle:
+            self.obstacle.value_label.setText('DETECTED')
+            self.obstacle.value_label.setStyleSheet('color:red')
+        else:
+            self.obstacle.value_label.setText('Clear')
+            self.obstacle.value_label.setStyleSheet('color:green')
+
+        self.battery_voltage.value_label.setText(status.get('battery_voltage', '--'))
+        self.battery_current.value_label.setText(status.get('battery_current', '--'))
+        self.mission_progress.value_label.setText(status.get('mission_progress', '--'))
