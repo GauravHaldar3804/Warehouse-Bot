@@ -4,28 +4,27 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
-import random
 
 
 class HomePage(QWidget):
 
-    def __init__(self, main_window):
+    def __init__(self, main_window, ros_node=None):
         super().__init__()
 
         self.main_window = main_window
+        self.ros_node = ros_node
 
-        # Background gradient
         self.setStyleSheet("""
         QWidget{
-            background:qlineargradient(
-                x1:0,y1:0,x2:1,y2:1,
-                stop:0 #eef2f5,
-                stop:1 #d6e2ec
-            );
+            background:#f5f7fb;
+            color:#111827;
+            font-family:Segoe UI, Arial, sans-serif;
         }
         """)
 
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(24)
 
         # ---------------- TITLE ----------------
         title = QLabel("AGV CONTROL DASHBOARD")
@@ -76,8 +75,8 @@ class HomePage(QWidget):
         # ---------------- STATUS CARDS ----------------
         status_row = QHBoxLayout()
 
-        self.position_card = self.create_status_card("📍 Position", "A1")
-        self.state_card = self.create_status_card("⚡ State", "Idle")
+        self.position_card = self.create_status_card("📍 Position", "Unknown")
+        self.state_card = self.create_status_card("⚡ State", "Waiting")
         self.task_card = self.create_status_card("📦 Task", "None")
 
         status_row.addWidget(self.position_card)
@@ -111,21 +110,22 @@ class HomePage(QWidget):
         buttons = [task_btn, camera_btn, map_btn, agv_btn, sys_btn, log_btn]
 
         for b in buttons:
-            b.setMinimumHeight(100)
-            b.setFont(QFont("Arial",14,QFont.Bold))
+            b.setMinimumHeight(94)
+            b.setFont(QFont("Arial",13,QFont.DemiBold))
             b.setStyleSheet("""
             QPushButton{
                 background:white;
-                border:2px solid #d0d7de;
-                border-radius:15px;
+                color:#111827;
+                border:1px solid #d8e0ea;
+                border-radius:16px;
+                padding:14px;
             }
             QPushButton:hover{
-                background:#3498db;
-                color:white;
-                border:2px solid #3498db;
+                background:#f3f7ff;
+                border-color:#bfdbfe;
             }
             QPushButton:pressed{
-                background:#2c80b4;
+                background:#e5edff;
             }
             """)
 
@@ -142,12 +142,10 @@ class HomePage(QWidget):
 
         self.setLayout(main_layout)
 
-        # ---------------- TIMER ----------------
-        self.battery_level = 100
-
+        # ---------------- REAL-TIME UPDATE TIMER ----------------
         self.timer = QTimer()
-        self.timer.timeout.connect(self.update_dashboard)
-        self.timer.start(3000)
+        self.timer.timeout.connect(self.update_status)
+        self.timer.start(500)  # Update every 500ms
 
     # ---------------- STATUS CARD ----------------
     def create_status_card(self, title, value):
@@ -155,10 +153,10 @@ class HomePage(QWidget):
         card = QFrame()
         card.setStyleSheet("""
         QFrame{
-            background:#f4f7fb;
-            border-radius:10px;
-            padding:10px;
-            border:1px solid #e1e4e8;
+            background:white;
+            border-radius:18px;
+            padding:18px;
+            border:1px solid #e5e7eb;
         }
         """)
 
@@ -179,23 +177,89 @@ class HomePage(QWidget):
 
         return card
 
-    # ---------------- UPDATE BATTERY ----------------
-    def update_dashboard(self):
+    # ---------------- UPDATE STATUS ----------------
+    def update_status(self):
+        if self.ros_node is None:
+            # No ROS connection - show offline status
+            self.agv_status.setText("● AGV OFFLINE")
+            self.agv_status.setStyleSheet("color:#e74c3c")
+            self.position_card.value_label.setText("No ROS")
+            self.state_card.value_label.setText("Disconnected")
+            self.task_card.value_label.setText("N/A")
+            self.battery_bar.setValue(0)
+            self.battery_text.setText("--")
+            return
 
-        self.battery_level -= random.randint(0,2)
+        # Get real-time status from ROS
+        status = self.ros_node.get_status_snapshot()
 
-        if self.battery_level > 50:
-            color = "#27ae60"
-        elif self.battery_level > 20:
-            color = "#f39c12"
+        # Update AGV connection status
+        connection = status.get('connection', 'Unknown')
+        if connection == 'Topics active':
+            self.agv_status.setText("● AGV ONLINE")
+            self.agv_status.setStyleSheet("color:#27ae60")
         else:
-            color = "#e74c3c"
+            self.agv_status.setText("● AGV CONNECTING")
+            self.agv_status.setStyleSheet("color:#f39c12")
 
-        self.battery_bar.setStyleSheet(f"""
-        QProgressBar::chunk {{
-            background:{color};
-        }}
-        """)
+        # Update position
+        position = status.get('position', 'Unknown')
+        self.position_card.value_label.setText(position)
 
-        self.battery_bar.setValue(self.battery_level)
-        self.battery_text.setText(str(self.battery_level) + "%")
+        # Update state
+        state = status.get('state', 'Unknown')
+        self.state_card.value_label.setText(state)
+
+        # Update task/target
+        target = status.get('target', '--')
+        if target and target != '--':
+            self.task_card.value_label.setText(f"→ {target}")
+        else:
+            self.task_card.value_label.setText("None")
+
+        # Update battery
+        battery_text = status.get('battery', '--')
+        self.battery_text.setText(battery_text)
+
+        # Update battery progress bar
+        try:
+            if '%' in str(battery_text):
+                battery_pct = int(str(battery_text).replace('%', '').strip())
+            else:
+                battery_pct = 0
+
+            self.battery_bar.setValue(battery_pct)
+
+            # Set battery bar color based on level
+            if battery_pct > 50:
+                color = "#27ae60"  # Green
+            elif battery_pct > 20:
+                color = "#f39c12"  # Orange
+            else:
+                color = "#e74c3c"  # Red
+
+            self.battery_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background-color: {color};
+                border-radius: 4px;
+            }}
+            """)
+
+        except (ValueError, AttributeError):
+            self.battery_bar.setValue(0)
+            self.battery_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #95a5a6;
+                border-radius: 4px;
+            }
+            """)

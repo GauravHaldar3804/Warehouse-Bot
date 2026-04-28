@@ -14,7 +14,7 @@ class TaskPage(QWidget):
 
         self.main_window = main_window
         self.ros_node = ros_node
-        self.setStyleSheet("background-color:#eef2f5;")
+        self.setStyleSheet("background-color:#f5f7fb; color:#111827; font-family:Segoe UI, Arial, sans-serif;")
 
         # Subscribe to path results if ROS node is available
         if self.ros_node:
@@ -25,19 +25,12 @@ class TaskPage(QWidget):
         # ---------------- TOP BAR ----------------
         top_bar = QHBoxLayout()
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFixedWidth(90)
-        back_btn.setStyleSheet("""
-        QPushButton{
-            background-color:#3498db;
-            color:white;
-            border-radius:6px;
-            padding:5px;
-        }
-        QPushButton:hover{
-            background-color:#2980b9;
-        }
-        """)
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedSize(100, 35)
+        back_btn.setStyleSheet(
+            'QPushButton{background-color:#3498db; color:white; border-radius:8px; font-weight:bold;}'
+            'QPushButton:hover{background-color:#2980b9;}'
+        )
         back_btn.clicked.connect(self.main_window.show_home)
 
         title = QLabel("Task Management")
@@ -53,7 +46,7 @@ class TaskPage(QWidget):
 
         # ---------------- CURRENT TASK ----------------
         self.current_task = QLabel("Current Task: None")
-        self.current_task.setStyleSheet("font-size:14px; color:#2c3e50")
+        self.current_task.setStyleSheet("font-size:14px; color:#334155; margin-bottom:8px;")
         main_layout.addWidget(self.current_task)
 
         # ---------------- MAIN CONTENT ----------------
@@ -94,13 +87,15 @@ class TaskPage(QWidget):
 
         start_btn.setStyleSheet("""
         QPushButton{
-            background-color:#2ecc71;
+            background:#2563eb;
             color:white;
-            border-radius:8px;
-            font-weight:bold;
+            border:none;
+            border-radius:14px;
+            font-weight:600;
+            padding:12px 14px;
         }
         QPushButton:hover{
-            background-color:#27ae60;
+            background:#1d4ed8;
         }
         """)
 
@@ -141,6 +136,19 @@ class TaskPage(QWidget):
         # -------- Complete Task Button --------
         complete_btn = QPushButton("Simulate Task Completion")
         complete_btn.clicked.connect(self.complete_task)
+        complete_btn.setFixedHeight(46)
+        complete_btn.setStyleSheet("""
+        QPushButton{
+            background:#ffffff;
+            color:#1f2937;
+            border:1px solid #d1d5db;
+            border-radius:14px;
+            padding:10px 14px;
+        }
+        QPushButton:hover{
+            background:#eef2ff;
+        }
+        """)
 
         main_layout.addWidget(complete_btn)
 

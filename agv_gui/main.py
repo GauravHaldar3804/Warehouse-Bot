@@ -25,7 +25,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
 
-        self.home = HomePage(self)
+        self.home = HomePage(self, self.ros_node)
         self.task = TaskPage(self, self.ros_node)
         self.agv_status = AGVStatusPage(self, self.ros_node)
         self.system_status = SystemStatusPage(self, self.ros_node)
@@ -42,6 +42,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.camera_page)
 
         self.ros_node.activity_log = self.activity_log
+
+        # Register obstacle detection callback to auto-show camera
+        self.ros_node.register_obstacle_callback(self.on_obstacle_detected)
         self.show_home()
 
     def show_home(self):
@@ -64,6 +67,12 @@ class MainWindow(QMainWindow):
 
     def show_camera(self):
         self.stack.setCurrentWidget(self.camera_page)
+
+    def on_obstacle_detected(self, obstacle_present):
+        """Called when obstacle detection state changes"""
+        if obstacle_present:
+            # Automatically show camera when obstacle is detected
+            self.show_camera()
 
 
 def main():

@@ -14,26 +14,19 @@ class ActivityLogPage(QWidget):
 
         self.main_window = main_window
         self.ros_node = ros_node
-        self.setStyleSheet("background-color:#eef2f5;")
+        self.setStyleSheet("background-color:#f5f7fb; color:#111827; font-family:Segoe UI, Arial, sans-serif;")
 
         main_layout = QVBoxLayout()
 
         # HEADER
         header = QHBoxLayout()
 
-        back_btn = QPushButton("← Back")
-        back_btn.setFixedWidth(90)
-        back_btn.setStyleSheet("""
-        QPushButton{
-            background-color:#3498db;
-            color:white;
-            border-radius:6px;
-            padding:5px;
-        }
-        QPushButton:hover{
-            background-color:#2980b9;
-        }
-        """)
+        back_btn = QPushButton('← Back')
+        back_btn.setFixedSize(100, 35)
+        back_btn.setStyleSheet(
+            'QPushButton{background-color:#3498db; color:white; border-radius:8px; font-weight:bold;}'
+            'QPushButton:hover{background-color:#2980b9;}'
+        )
         back_btn.clicked.connect(self.main_window.show_home)
 
         title = QLabel("Activity Log")
@@ -54,9 +47,10 @@ class ActivityLogPage(QWidget):
         self.log_list.setStyleSheet("""
         QListWidget{
             background:white;
-            border-radius:10px;
-            padding:10px;
+            border-radius:16px;
+            padding:14px;
             font-size:13px;
+            border:1px solid #e5e7eb;
         }
         """)
 
@@ -65,6 +59,19 @@ class ActivityLogPage(QWidget):
         # TEST BUTTON (simulate events)
         test_btn = QPushButton("Simulate Event")
         test_btn.clicked.connect(self.add_test_log)
+        test_btn.setFixedHeight(42)
+        test_btn.setStyleSheet("""
+        QPushButton{
+            background:#ffffff;
+            color:#1f2937;
+            border:1px solid #d1d5db;
+            border-radius:14px;
+            padding:10px 14px;
+        }
+        QPushButton:hover{
+            background:#eef2ff;
+        }
+        """)
 
         main_layout.addWidget(test_btn)
 

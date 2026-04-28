@@ -54,8 +54,9 @@ class CameraPage(QWidget):
         self.main_window = main_window
         self.main_ros_node = ros_node
         self.camera_node = None
+        self.obstacle_alert_active = False
 
-        self.setStyleSheet('background-color:#eef2f5;')
+        self.setStyleSheet('background-color:#f5f7fb; color:#111827; font-family:Segoe UI, Arial, sans-serif;')
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(20, 10, 20, 10)
@@ -72,6 +73,10 @@ class CameraPage(QWidget):
         self.status_label = QLabel('Camera Status: Initializing...')
         self.status_label.setStyleSheet('color: #e67e22; font-weight: bold;')
 
+        self.obstacle_alert = QLabel()
+        self.obstacle_alert.setStyleSheet('color: white; font-weight: bold; font-size: 14px;')
+        self.obstacle_alert.setVisible(False)
+
         title = QLabel('📷 Live Camera Feed')
         title.setFont(QFont('Arial', 20, QFont.Bold))
         title.setStyleSheet('color:#2c3e50;')
@@ -83,10 +88,24 @@ class CameraPage(QWidget):
         header.addWidget(self.status_label)
         main_layout.addLayout(header)
 
+        # Add obstacle alert banner
+        self.alert_banner = QFrame()
+        self.alert_banner.setStyleSheet('QFrame{background:#fee2e2; border-radius:14px; padding:14px; border:1px solid #f5c2c7;}')
+        self.alert_banner.setVisible(False)
+        alert_layout = QHBoxLayout()
+        alert_layout.addWidget(QLabel('⚠ OBSTACLE DETECTED!'))
+        self.alert_banner.setLayout(alert_layout)
+        main_layout.addWidget(self.alert_banner)
+
+
+        # Subscribe to obstacle signals
+        if self.main_ros_node:
+            self.main_ros_node.register_obstacle_callback(self.on_obstacle_detected)
+
         container = QFrame()
-        container.setStyleSheet('QFrame{background:white; border-radius:15px; border:1px solid #d0d7de;}')
+        container.setStyleSheet('QFrame{background:white; border-radius:18px; border:1px solid #e5e7eb;}')
         clayout = QVBoxLayout()
-        clayout.setContentsMargins(20, 20, 20, 20)
+        clayout.setContentsMargins(18, 18, 18, 18)
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
@@ -143,6 +162,26 @@ class CameraPage(QWidget):
         except Exception as exc:
             self.status_label.setText(f'Camera update failed: {str(exc)[:80]}')
             self.status_label.setStyleSheet('color: #e74c3c; font-weight: bold;')
+
+    def on_obstacle_detected(self, obstacle_present):
+        """Called when obstacle detection state changes"""
+        self.obstacle_alert_active = obstacle_present
+        self.update_obstacle_alert(obstacle_present)
+
+    def update_obstacle_alert(self, show_alert):
+        """Update the visibility of the obstacle alert banner"""
+        if show_alert:
+            self.alert_banner.setVisible(True)
+            self.alert_banner.setStyleSheet(
+                'QFrame{background-color:#e74c3c; border-radius:8px; padding:15px; '
+                'border:2px solid #c0392b;}'
+            )
+            alert_label = self.alert_banner.findChild(QLabel)
+            if alert_label:
+                alert_label.setText('⚠  OBSTACLE DETECTED! - Camera Feed Active')
+                alert_label.setStyleSheet('color: white; font-weight: bold; font-size: 16px;')
+        else:
+            self.alert_banner.setVisible(False)
 
     def closeEvent(self, event):
         if self.timer.isActive():

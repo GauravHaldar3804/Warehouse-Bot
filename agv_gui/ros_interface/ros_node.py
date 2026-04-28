@@ -17,6 +17,7 @@ class DashboardRosNode(Node):
 
 		# Callback registries for pages
 		self.path_result_callbacks = []
+		self.obstacle_detected_callbacks = []
 		self.activity_log = None
 
 		self._status = {
@@ -41,6 +42,7 @@ class DashboardRosNode(Node):
 		self._last_motor_time = 0.0
 		self._last_battery_time = 0.0
 		self._last_update_time = 0.0
+		self._last_obstacle_state = False
 
 		self._camera_qos = QoSProfile(
 			reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -128,6 +130,16 @@ class DashboardRosNode(Node):
 		if callback in self.path_result_callbacks:
 			self.path_result_callbacks.remove(callback)
 
+	def register_obstacle_callback(self, callback):
+		"""Register a callback to be called when obstacle state changes"""
+		if callback not in self.obstacle_detected_callbacks:
+			self.obstacle_detected_callbacks.append(callback)
+
+	def unregister_obstacle_callback(self, callback):
+		"""Unregister an obstacle detection callback"""
+		if callback in self.obstacle_detected_callbacks:
+			self.obstacle_detected_callbacks.remove(callback)
+
 	def _on_motor_command(self, msg: String):
 		cmd = (msg.data or '').strip().upper()
 		if not cmd:
@@ -173,11 +185,22 @@ class DashboardRosNode(Node):
 		return True
 
 	def _on_obstacle(self, msg: Bool):
+		self._status['obstacle_detected'] = msg.data
 		if msg.data:
 			self._status['state'] = 'Obstacle detected'
 		elif self._status['last_motor_command'] == 'START':
 			self._status['state'] = 'Navigating'
+		self._last_tof_time = time.time()
 		self._touch()
+
+		# Notify callbacks if obstacle state changed
+		if msg.data != self._last_obstacle_state:
+			self._last_obstacle_state = msg.data
+			for callback in self.obstacle_detected_callbacks:
+				try:
+					callback(msg.data)
+				except Exception as e:
+					self.get_logger().error(f'Error in obstacle callback: {e}')
 
 	def get_status_snapshot(self):
 		snapshot = dict(self._status)
