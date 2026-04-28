@@ -9,6 +9,7 @@ from pages.agv_status import AGVStatusPage
 from pages.system_status import SystemStatusPage
 from pages.activity_log import ActivityLogPage
 from pages.warehouse_map import WarehouseMapPage
+from pages.camera import CameraPage
 from ros_interface.ros_node import DashboardRosNode
 
 
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
         self.system_status = SystemStatusPage(self, self.ros_node)
         self.activity_log = ActivityLogPage(self, self.ros_node)
         self.map_page = WarehouseMapPage(self, self.ros_node)
+        self.camera_page = CameraPage(self, self.ros_node)
 
         self.stack.addWidget(self.home)
         self.stack.addWidget(self.task)
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.system_status)
         self.stack.addWidget(self.activity_log)
         self.stack.addWidget(self.map_page)
+        self.stack.addWidget(self.camera_page)
 
         self.ros_node.activity_log = self.activity_log
         self.show_home()
@@ -58,6 +61,9 @@ class MainWindow(QMainWindow):
         
     def show_map(self):
         self.stack.setCurrentWidget(self.map_page)
+
+    def show_camera(self):
+        self.stack.setCurrentWidget(self.camera_page)
 
 
 def main():

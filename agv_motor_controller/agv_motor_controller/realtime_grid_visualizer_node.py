@@ -14,8 +14,8 @@ from .grid_path_planner import GridPathPlanner
 class RealtimeGridVisualizerNode(Node):
     """Render the planner grid and node labels in an OpenCV window."""
 
-    def __init__(self):
-        super().__init__('realtime_grid_visualizer_node')
+    def __init__(self, headless: bool = False, node_name: str = 'realtime_grid_visualizer_node'):
+        super().__init__(node_name)
 
         # Printed map is 3x2 cells, which corresponds to 4x3 intersection nodes.
         self.planner = GridPathPlanner(num_cols=4, num_rows=3)
@@ -49,9 +49,10 @@ class RealtimeGridVisualizerNode(Node):
         self.background_color = (235, 235, 235)
         self.lane_color = (0, 0, 0)
         self.dock_color = (207, 224, 233)
+        self.headless = headless
 
         self.window_name = 'AGV Realtime Grid Visualizer'
-        self.timer = self.create_timer(0.1, self.render)
+        self.timer = None if self.headless else self.create_timer(0.1, self.render)
 
         # Match camera_test publisher QoS (BEST_EFFORT), otherwise no messages are received.
         qr_qos = QoSProfile(
@@ -278,7 +279,7 @@ class RealtimeGridVisualizerNode(Node):
         front_px = self.world_to_pixel(float(fx), float(fy))
         cv2.arrowedLine(img, center_px, front_px, (30, 30, 30), 2, tipLength=0.35)
 
-    def render(self):
+    def build_frame(self):
         self.compute_layout()
         frame = np.full((self.window_height, self.window_width, 3), self.background_color, dtype=np.uint8)
 
@@ -319,6 +320,14 @@ class RealtimeGridVisualizerNode(Node):
             cv2.LINE_AA,
         )
 
+        return frame
+
+    def render(self):
+        frame = self.build_frame()
+
+        if self.headless:
+            return frame
+
         cv2.imshow(self.window_name, frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
@@ -326,7 +335,8 @@ class RealtimeGridVisualizerNode(Node):
             rclpy.shutdown()
 
     def destroy_node(self):
-        cv2.destroyAllWindows()
+        if not self.headless:
+            cv2.destroyAllWindows()
         super().destroy_node()
 
 

@@ -96,6 +96,7 @@ class HomePage(QWidget):
 
         task_btn = QPushButton("📦 Task Management")
         map_btn = QPushButton("🗺 Warehouse Map")
+        camera_btn = QPushButton("📷 Camera Feed")
         agv_btn = QPushButton("🤖 AGV Status")
         sys_btn = QPushButton("⚙ System Status")
         log_btn = QPushButton("📜 Activity Log")
@@ -105,8 +106,9 @@ class HomePage(QWidget):
         sys_btn.clicked.connect(self.main_window.show_system_status)
         log_btn.clicked.connect(self.main_window.show_activity_log)
         map_btn.clicked.connect(self.main_window.show_map)
+        camera_btn.clicked.connect(self.main_window.show_camera)
 
-        buttons = [task_btn, map_btn, agv_btn, sys_btn, log_btn]
+        buttons = [task_btn, camera_btn, map_btn, agv_btn, sys_btn, log_btn]
 
         for b in buttons:
             b.setMinimumHeight(100)
@@ -128,12 +130,13 @@ class HomePage(QWidget):
             """)
 
         grid.addWidget(task_btn,0,0)
-        grid.addWidget(agv_btn,0,1)
+        grid.addWidget(camera_btn,0,1)
 
         grid.addWidget(map_btn,1,0)
-        grid.addWidget(sys_btn,1,1)
+        grid.addWidget(agv_btn,1,1)
 
-        grid.addWidget(log_btn,2,0,1,2)
+        grid.addWidget(sys_btn,2,0)
+        grid.addWidget(log_btn,2,1)
 
         main_layout.addLayout(grid)
 
