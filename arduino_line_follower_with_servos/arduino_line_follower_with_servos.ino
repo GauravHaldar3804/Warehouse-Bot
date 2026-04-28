@@ -41,7 +41,7 @@ enum ManualCommand {
 
 ManualCommand manualCommand = CMD_NONE;
 
-const int manualStraightSpeed = 150;
+const int manualStraightSpeed = 100;
 const int manualTurnSpeed = 255;
 const unsigned long leftRightTurnDurationMs = 2000;
 const unsigned long goalForwardDurationMs = 4000;
