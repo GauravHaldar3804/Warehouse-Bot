@@ -195,7 +195,7 @@ int weights[8] = {3,2,1,0,0,-1,-2,-3};
 const uint8_t panServoChannel = 8;
 const uint8_t tiltServoChannel = 9;
 
-int panCenterDeg = 90;
+int panCenterDeg = 106;
 int tiltDownDeg = 180;
 int tiltFrontDeg = 90;
 
