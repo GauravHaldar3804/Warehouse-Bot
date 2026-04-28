@@ -15,6 +15,10 @@ class DashboardRosNode(Node):
 	def __init__(self):
 		super().__init__('agv_dashboard_node')
 
+		# Callback registries for pages
+		self.path_result_callbacks = []
+		self.activity_log = None
+
 		self._status = {
 			'connection': 'ROS Node Active',
 			'battery': '--',
@@ -106,6 +110,23 @@ class DashboardRosNode(Node):
 			self._status['target'] = goal if goal else '--'
 			self._status['state'] = 'Mission loaded'
 			self._touch()
+
+			# Notify registered callbacks
+			for callback in self.path_result_callbacks:
+				try:
+					callback(payload)
+				except Exception as e:
+					self.get_logger().error(f'Error in path result callback: {e}')
+
+	def register_path_result_callback(self, callback):
+		"""Register a callback to be called when path results are received"""
+		if callback not in self.path_result_callbacks:
+			self.path_result_callbacks.append(callback)
+
+	def unregister_path_result_callback(self, callback):
+		"""Unregister a path result callback"""
+		if callback in self.path_result_callbacks:
+			self.path_result_callbacks.remove(callback)
 
 	def _on_motor_command(self, msg: String):
 		cmd = (msg.data or '').strip().upper()
