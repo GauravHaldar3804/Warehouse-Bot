@@ -45,7 +45,7 @@ const int manualStraightSpeed = 100;
 const int manualTurnSpeed = 255;
 const unsigned long leftRightTurnDurationMs = 2000;
 const unsigned long goalForwardDurationMs = 4000;
-const unsigned long goalSpinDurationMs = 6000;
+const unsigned long goalSpinDurationMs = 4000;
 const unsigned long uturnDurationMs = 4000;
 const unsigned long stopBeforeTurnDurationMs = 250;
 
@@ -196,7 +196,7 @@ const uint8_t panServoChannel = 8;
 const uint8_t tiltServoChannel = 9;
 
 int panCenterDeg = 106;
-int tiltDownDeg = 180;
+int tiltDownDeg = 160;
 int tiltFrontDeg = 90;
 
 // PCA9685 pulse counts for typical servos at 50 Hz.
