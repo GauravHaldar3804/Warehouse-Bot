@@ -62,11 +62,11 @@ class CameraNode(Node):
         self.last_node_event_time = 0.0
         self.node_event_cooldown_sec = 1.0
         self.same_node_wrong_grace_sec = 10.0
-        self.intersection_straight_sec = 5.0
+        self.intersection_straight_sec = 7.0
         self.pre_turn_stop_sec = 0.25
         self.delayed_commands = []
         self.goal_forward_sec = 4.0
-        self.goal_spin_sec = 6.0
+        self.goal_spin_sec = 4.0
         self.goal_sequence_active = False
         self.wrong_node_stop_sec = 1.0
         self.replan_cooldown_sec = 2.0

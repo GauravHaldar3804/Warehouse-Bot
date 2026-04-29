@@ -427,8 +427,8 @@ void checkCommand() {
 
     if (cmd == "STRAIGHT" || cmd == "FORWARD") {
       isRunning = true;
-      startTimedManualCommand(CMD_STRAIGHT, leftRightTurnDurationMs);
-      Serial.println("MANUAL STRAIGHT (2s)");
+      startTimedManualCommand(CMD_STRAIGHT, 0);
+      Serial.println("MANUAL STRAIGHT (UNTIL STOP)");
       return;
     }
 
